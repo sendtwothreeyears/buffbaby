@@ -52,6 +52,16 @@ Record:
 
 ## Phase 4: Code Quality Review
 
+### 4.0 Check Institutional Knowledge
+
+Surface relevant past solutions before reviewing:
+
+- Task learnings-researcher("Find learnings related to the modules changed in this phase")
+
+Use any matches to inform the review — flag code that repeats previously-documented mistakes or ignores proven patterns.
+
+### 4.1 Review Focus
+
 Review the code changes made during this phase. Focus on:
 
 1. **Correctness** — Does the code actually do what the phase requires?

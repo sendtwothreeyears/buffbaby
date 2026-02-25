@@ -40,11 +40,12 @@ Use **AskUserQuestion tool** to suggest: "Your requirements seem detailed enough
 
 #### 1.1 Repository Research (Lightweight)
 
-Run a quick repo scan to understand existing patterns:
+Run these agents **in parallel** to gather local context:
 
 - Task repo-research-analyst("Understand existing patterns related to: <feature_description>")
+- Task learnings-researcher("Find past solutions relevant to: <feature_description>")
 
-Focus on: similar features, established patterns, CLAUDE.md guidance.
+Focus on: similar features, established patterns, CLAUDE.md guidance, institutional learnings from `docs/solutions/`.
 
 #### 1.2 Collaborative Dialogue
 

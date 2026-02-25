@@ -85,9 +85,11 @@ If context is compacted:
 │     └─► Run type-check, lint, tests — fix any failures                      │
 │                                                                             │
 │  Phase 3: Code Review                                                       │
+│     ├─► Surface institutional knowledge (learnings-researcher)              │
 │     ├─► Self-review using code_review criteria                              │
 │     ├─► Validate each finding                                               │
-│     └─► Fix confirmed issues                                                │
+│     ├─► Fix confirmed issues                                                │
+│     └─► Simplicity pass (code-simplicity-reviewer)                          │
 │                                                                             │
 │  Phase 4: Ship                                                              │
 │     ├─► Sync with target branch, push                                       │
@@ -275,6 +277,14 @@ Fix any failures. Re-run until all pass.
 
 ## Phase 3: Code Review
 
+### 3.0 Surface Institutional Knowledge
+
+Before reviewing, check for relevant past solutions:
+
+- Task learnings-researcher("Find learnings related to: <modules and areas changed in this branch>")
+
+If relevant learnings are found, use them to inform the review — watch for previously-documented gotchas, patterns, or known failure modes.
+
 ### 3.1 Self-Review
 
 Review your own changes using the criteria from `code_review.md`:
@@ -327,6 +337,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
 ```
+
+### 3.4 Simplicity Pass
+
+Run a final simplicity review on the implementation:
+
+- Task code-simplicity-reviewer("Review the diff from this branch for YAGNI violations and simplification opportunities: git diff origin/$default_branch...HEAD")
+
+**Threshold:** Only act on findings that clearly reduce complexity without affecting functionality. This is a light pass, not a rewrite.
 
 ---
 
