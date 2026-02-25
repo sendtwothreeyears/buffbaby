@@ -1,5 +1,5 @@
 ---
-name: phase-prd
+name: workflow:phase-prd
 description: Break a PRD into phased, /ship-able work. Use when you have a PRD and need to decompose it into sequenced phases with clear validation criteria, ordered by dependency so each phase builds on the last.
 ---
 
@@ -104,38 +104,106 @@ This prevents scope creep during early phases and gives you a ready-made backlog
 
 ## Phase 6: Output the Phase Plan
 
-Present the complete plan in this format:
+Write the plan to a `plan/` folder in the current working directory. Create one file per phase, plus an overview file.
+
+### Folder Structure
 
 ```
+plan/
+├── 00-overview.md          # Full plan summary + deferred work
+├── 01-phase-[name].md      # Phase 1
+├── 02-phase-[name].md      # Phase 2
+├── 03-phase-[name].md      # Phase 3
+└── ...
+```
+
+### File Naming
+
+- Prefix with zero-padded number matching the phase number (01, 02, ... 10, 11)
+- Suffix with a kebab-case slug of the phase name (e.g., `01-phase-echo.md`, `02-phase-docker.md`)
+- The overview file is always `00-overview.md`
+
+### `00-overview.md` Format
+
+```markdown
+# [Project Name] — Phase Plan
+
 ## Stage 1: Local Development
-
-### Phase 1: [Name]
-- **Build:** [What you build]
-- **Depends on:** Nothing (first phase)
-- **Done when:** [Concrete validation]
-- **Tasks:**
-  - /ship [task description]
-
-### Phase 2: [Name]
-- **Build:** [What you build]
-- **Depends on:** Phase 1
-- **Done when:** [Concrete validation]
-- **Tasks:**
-  - /ship [task description]
-  - /ship [task description]
-
-...
+- Phase 1: [Name] → `01-phase-[name].md`
+- Phase 2: [Name] → `02-phase-[name].md`
 
 ## Stage 2: Deploy to Production
-...
+- Phase 3: [Name] → `03-phase-[name].md`
 
 ## Stage 3: Scale and Polish
-...
+- Phase 4: [Name] → `04-phase-[name].md`
 
 ## Deferred
 - [Item] → Stage [N]
 - [Item] → Stage [N]
 ```
+
+### Individual Phase File Format
+
+Each `NN-phase-[name].md` file:
+
+```markdown
+# Phase [N]: [Name]
+
+**Stage:** [Stage name]
+**Depends on:** [Phase N-1 or "Nothing (first phase)"]
+**Done when:** [Concrete validation criteria]
+
+## What You Build
+
+[Specific deliverables — not vague goals]
+
+## Tasks
+
+- /ship [task description]
+- /ship [task description]
+
+## Notes
+
+[Any additional context, gotchas, or decisions relevant to this phase]
+```
+
+### Writing the Files
+
+1. Create the `plan/` directory if it doesn't exist
+2. Write `00-overview.md` first
+3. Write each phase file in order
+4. Report the full list of created files to the user when done
+
+## Phase 7: Iterate on Each Phase
+
+After writing all files, walk the user through each phase one at a time for review and refinement.
+
+### Iteration Loop
+
+For each phase file (in order, starting with Phase 1):
+
+1. **Present the phase** — Read the phase file and present a summary to the user
+2. **Ask for feedback** — Use `AskUserQuestion` with these options:
+   - **"Looks good"** — Phase is approved, move to the next
+   - **"Needs changes"** — User wants to refine this phase
+   - **"Split this phase"** — Phase is too big, break it into smaller phases
+   - **"Merge with next"** — Phase is too small, combine with the following phase
+3. **Apply feedback** — If changes are requested, update the phase file and re-present
+4. **Repeat** until the user approves, then move to the next phase
+
+### When Splitting or Merging
+
+- **Split:** Create new numbered files and renumber all subsequent phases. Update `00-overview.md`.
+- **Merge:** Combine the two phase files into one, delete the extra, renumber subsequent phases. Update `00-overview.md`.
+- Always keep file numbering sequential with no gaps.
+
+### Completion
+
+Once all phases are approved:
+1. Update `00-overview.md` with the final phase list
+2. Report: total phases, total `/ship` tasks, and the recommended starting command (the first `/ship` task from Phase 1)
+3. Remind the user: "Run `/phase-review` after completing each phase to validate before moving on."
 
 ## Principles
 
