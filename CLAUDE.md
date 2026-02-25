@@ -53,20 +53,38 @@ The current developer's name is derived from `git config user.name`.
 
 ## Workflow
 
-The core development loop uses skills in `.claude/commands/workflow/`:
+### The Loop
 
-1. `/workflow:phase-prd` — split PRD into sequenced phases
-2. `/workflow:brainstorm` — explore what to build for a phase
-3. `/workflow:plan` — structure how to build it → writes to `docs/plans/`
-4. `/workflow:ship` — implement + code review + PR
-5. `/workflow:phase-review` — validate phase deliverables
-6. `/workflow:compound` — document what you learned → writes to `docs/solutions/`
+The core development loop. Each phase of the project cycles through steps 2–6:
 
-**Review criteria** (used internally by `/workflow:ship`):
-- `review-criteria:code_review` — standard review
-- `review-criteria:code_review_critical` — adversarial review
+```
+1. /workflow:phase-prd ─── Split PRD into sequenced phases (once, at project start)
+       │
+       ▼
+2. /workflow:brainstorm ── Explore what to build for this phase
+       │
+       ▼
+3. /workflow:plan ──────── Structure how to build it → docs/plans/
+       │
+       ▼
+4. /workflow:ship ──────── Implement + code review (via code_review criteria) + PR
+       │
+       ▼
+5. /workflow:phase-review ─ Validate the phase is done (PASS/FAIL)
+       │
+       ▼
+6. /workflow:compound ──── Document what you learned → docs/solutions/
+       │
+       └──► Next phase → back to step 2
+```
 
-**Utilities** (standalone tools):
+### Review Criteria (used internally by `/workflow:ship`)
+
+- `review-criteria:code_review` — standard review (architectural, tactical, stakeholder perspectives)
+- `review-criteria:code_review_critical` — adversarial review (failure modes, edge cases, security)
+
+### Utilities (standalone tools)
+
 - `utilities:compushar` — quick commit → push → PR
 - `utilities:fix-the-things` — automated environment repair
 - `utilities:investigate` — multi-perspective bug investigation

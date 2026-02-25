@@ -17,3 +17,6 @@ node_modules/
 
 # Notes (personal/working files)
 notes/
+
+# Archive (old files, not tracked)
+archive/
