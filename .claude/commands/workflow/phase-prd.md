@@ -66,22 +66,28 @@ Within each stage, create numbered phases. Each phase must have:
 - **Right size:** "Relay forwards SMS to Claude Code in Docker, response comes back as SMS" — one new capability, clear validation
 - **Too big:** "Full end-to-end workflow with screenshots, diffs, multi-agent, and session management" — break this into 4-5 phases
 
-## Phase 4: Map Phases to `/ship` Tasks
+## Phase 4: Map Phases to Workflow Tasks
 
-For each phase, write out the `/ship` commands that will build it:
+For each phase, define the tasks that will build it. Each task flows through the development loop:
 
 ```
-Phase 3: Command
-  /ship relay forwards SMS text to Claude Code headless in Docker container and returns response as SMS
+Phase 3: Command Relay
+  - [ ] Relay forwards SMS to Claude Code in Docker, returns response as SMS
+    - Plan: /workflow:plan relay server forwards SMS to Claude Code headless in Docker
+    - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-sms-relay-plan.md
 
 Phase 4: Screenshots
-  /ship Claude Code uses Playwright MCP to capture app screenshots and relay sends them back via Twilio MMS
+  - [ ] Claude Code captures screenshots via Playwright MCP, sent back via Twilio MMS
+    - Brainstorm: /workflow:brainstorm screenshot capture and MMS delivery approach
+    - Plan: /workflow:plan screenshot pipeline with Playwright MCP and Twilio MMS
+    - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-screenshot-pipeline-plan.md
 ```
 
-Each `/ship` task should be:
+Each task should be:
 - **Self-contained** — it can be built and validated independently within the phase
 - **Specific** — describes the exact behavior, not a vague goal
 - **Validatable** — you know it works when you see a specific result
+- **Loop-ready** — includes the workflow steps needed (brainstorm is optional for clear-scope tasks)
 
 ## Phase 5: Identify Deferred Work
 
@@ -104,12 +110,12 @@ This prevents scope creep during early phases and gives you a ready-made backlog
 
 ## Phase 6: Output the Phase Plan
 
-Write the plan to a `plan/` folder in the current working directory. Create one file per phase, plus an overview file.
+Write the plan to `docs/plans/phases/` in the current working directory. Create one file per phase, plus an overview file.
 
 ### Folder Structure
 
 ```
-plan/
+docs/plans/phases/
 ├── 00-overview.md          # Full plan summary + deferred work
 ├── 01-phase-[name].md      # Phase 1
 ├── 02-phase-[name].md      # Phase 2
@@ -127,6 +133,15 @@ plan/
 
 ```markdown
 # [Project Name] — Phase Plan
+
+## Workflow
+
+Each phase follows the development loop:
+
+1. `/workflow:brainstorm` — Explore approach (skip if scope is obvious)
+2. `/workflow:plan` — Create a plan document in `docs/plans/`
+3. `/workflow:ship` — Implement from the plan document
+4. `/workflow:phase-review` — Validate phase deliverables before moving on
 
 ## Stage 1: Local Development
 - Phase 1: [Name] → `01-phase-[name].md`
@@ -160,8 +175,16 @@ Each `NN-phase-[name].md` file:
 
 ## Tasks
 
-- /ship [task description]
-- /ship [task description]
+For each task, follow the workflow loop. Skip brainstorm for tasks with obvious scope.
+
+- [ ] [Task description]
+  - Brainstorm: `/workflow:brainstorm [topic]` (skip if scope is clear)
+  - Plan: `/workflow:plan [feature description]`
+  - Ship: `/workflow:ship docs/plans/[plan-file].md`
+
+- [ ] [Task description]
+  - Plan: `/workflow:plan [feature description]`
+  - Ship: `/workflow:ship docs/plans/[plan-file].md`
 
 ## Notes
 
@@ -170,7 +193,7 @@ Each `NN-phase-[name].md` file:
 
 ### Writing the Files
 
-1. Create the `plan/` directory if it doesn't exist
+1. Create the `docs/plans/phases/` directory if it doesn't exist
 2. Write `00-overview.md` first
 3. Write each phase file in order
 4. Report the full list of created files to the user when done
@@ -202,8 +225,8 @@ For each phase file (in order, starting with Phase 1):
 
 Once all phases are approved:
 1. Update `00-overview.md` with the final phase list
-2. Report: total phases, total `/ship` tasks, and the recommended starting command (the first `/ship` task from Phase 1)
-3. Remind the user: "Run `/phase-review` after completing each phase to validate before moving on."
+2. Report: total phases, total tasks, and the recommended starting command (the first `/workflow:brainstorm` or `/workflow:plan` from Phase 1)
+3. Remind the user: "Run `/workflow:phase-review` after completing each phase to validate before moving on."
 
 ## Principles
 

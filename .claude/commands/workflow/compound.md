@@ -17,8 +17,8 @@ Captures problem solutions while context is fresh, creating structured documenta
 ## Usage
 
 ```bash
-/workflows:compound                    # Document the most recent fix
-/workflows:compound [brief context]    # Provide additional context hint
+/workflow:compound                    # Document the most recent fix
+/workflow:compound [brief context]    # Provide additional context hint
 ```
 
 ## Execution Strategy: Two-Phase Orchestration

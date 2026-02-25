@@ -9,8 +9,8 @@ Review a completed development phase against its plan. Validate that deliverable
 
 ## Phase 1: Identify the Phase to Review
 
-1. Look for a `plan/` directory in the current working directory
-2. If no `plan/` directory exists, ask the user where their phase files are
+1. Look for a `docs/plans/phases/` directory in the current working directory
+2. If no `docs/plans/phases/` directory exists, ask the user where their phase files are
 3. Read `00-overview.md` to understand the full plan context
 4. **Auto-detect the current phase:** Scan phase files in order. The first file without a `## Review` section (or with a failed review) is the phase to review.
 5. If all phases have passing reviews, tell the user — the plan is complete.
@@ -25,7 +25,7 @@ If the user passes a phase number or name as an argument, use that instead of au
    - **Validation criteria** — the "Done when" conditions
    - **Deliverables** — what was supposed to be built
    - **Dependencies** — what this phase builds on (confirm those phases passed review)
-   - **Tasks** — the `/ship` tasks that were defined
+   - **Tasks** — the workflow tasks that were defined (brainstorm → plan → ship)
 
 If a dependency phase hasn't passed review yet, warn the user: "Phase [dep] hasn't been reviewed yet. Review that first, or continue anyway?"
 
@@ -101,7 +101,7 @@ Update the phase file by appending a `## Review` section at the bottom:
 
 ### Next Steps
 
-[If PASS: "Phase complete. Next: Phase [N+1] — start with: `/ship [first task]`"]
+[If PASS: "Phase complete. Next: Phase [N+1] — start with the first task's `/workflow:brainstorm` or `/workflow:plan`"]
 [If FAIL: "Fix these items before proceeding: [list]"]
 ```
 
@@ -114,7 +114,7 @@ Update the phase file by appending a `## Review` section at the bottom:
    - Phase [N] is complete
    - Summary of what was validated
    - Any tech debt to be aware of
-   - The next phase name and its first `/ship` task
+   - The next phase name and its first task (starting with `/workflow:brainstorm` or `/workflow:plan`)
 3. If this was the last phase: "All phases complete. The plan is fully implemented."
 
 ### If FAIL
