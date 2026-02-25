@@ -1,7 +1,7 @@
 ---
 title: "feat: SMS Echo Server with MMS Test Image"
 type: feat
-status: active
+status: completed
 date: 2026-02-25
 phase: 1
 ---
