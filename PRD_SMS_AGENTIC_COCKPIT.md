@@ -3,7 +3,7 @@
 **Author:** Emmanuel
 **Date:** 2026-02-24
 **Status:** Draft
-**Last Updated:** 2026-02-24
+**Last Updated:** 2026-02-25
 **Model:** Fully cloud-hosted service — users need only a phone and internet connection
 
 ---
@@ -12,24 +12,24 @@
 
 _Software engineers using agentic workflows (Claude Code, Codex CLI, Gemini CLI) are tethered to their laptops. The entire agentic development lifecycle — commanding agents, reviewing diffs, previewing apps, triggering deployments — requires a desktop terminal and IDE. There is no way to orchestrate these workflows from a phone, despite the fact that the engineer's role in an agentic workflow is fundamentally about directing, reviewing, and approving — tasks that don't require a full desktop environment._
 
-_SMS is the one universal interface that exists on every phone ever made — iPhone, Android, flip phones. No app to download. No account to create. No onboarding friction. The engineer texts a phone number and the entire agentic development workflow is at their fingertips: status updates as text, code diffs as images, app previews as screenshots, approvals as simple text replies. The conversation thread becomes the project log._
+_SMS is the one universal interface that exists on every phone ever made — iPhone, Android, flip phones. No app to download. No account to create. No onboarding friction. The engineer texts a phone number and gets a direct line to their own Claude Code instance running in the cloud: status updates as text, code diffs as images, app previews as screenshots, approvals as simple text replies. The conversation thread becomes the project log._
 
 **Who** is affected:
-Software engineers who already use agentic development workflows (Claude Code slash commands, multi-agent reviews, compound engineering patterns). Specifically, engineers in bootcamps, startups, and teams who want to stay productive from anywhere — commutes, couches, coffee shops — without carrying a laptop. They need only a phone and a cell signal. No laptop, no Mac, no personal server, no hardware of any kind. iPhone or Android — it doesn't matter.
+Software engineers who already use Claude Code and agentic workflows. Specifically, engineers in bootcamps, startups, and teams who want to stay productive from anywhere — commutes, couches, coffee shops — without carrying a laptop. They need only a phone and a cell signal. No laptop, no Mac, no personal server, no hardware of any kind. iPhone or Android — it doesn't matter.
 
 **What** they struggle with:
-- Agentic workflows are locked to the terminal. You can't run `/ship`, `/team_three_review`, or `/investigate` from your phone.
+- Claude Code is locked to the terminal. You can't use your skills, workflows, or agent orchestration from your phone.
 - No way to see live app previews, code diffs, or deployment status on mobile.
 - Existing mobile dev tools (Replit, Codespaces) are either non-technical (targeting beginners) or have terrible mobile UX (desktop IDE crammed into a phone browser).
-- Engineers who know these workflows have no mobile-native way to leverage them.
+- Engineers who have invested in custom Claude Code setups (skills, workflows, multi-agent patterns) have no mobile-native way to leverage them.
 - Every "solution" requires downloading another app. Engineers don't want another app — they want the tools to meet them where they already are.
 
 **Why now** (urgency/opportunity):
 - Claude Code Remote Control just launched (Feb 2026) — proves the concept of phone-to-CLI is viable, but it's barebones (chat only, requires laptop to stay on).
 - Third-party tools (Kibbler, Moshi) are emerging but fragmented — voice here, diffs there, no unified experience. All require installing new apps.
-- Agentic workflows have matured (multi-agent orchestration, 11+ slash commands, phase-based workflows) but remain desktop-only.
+- Agentic workflows have matured (custom skills, multi-agent orchestration, phase-based workflows) but remain desktop-only.
 - OpenClaw proves multi-channel AI assistants work (WhatsApp, Telegram, Discord, Slack) but targets general-purpose automation, not engineering workflows — and still requires third-party app installation.
-- The gap is clear: no tool puts agentic workflow orchestration inside the one interface that requires zero installation — SMS.
+- The gap is clear: no tool puts an engineer's own Claude Code instance behind the one interface that requires zero installation — SMS.
 
 **Evidence** (data, quotes, research):
 - Replit Mobile hit #1 on the App Store (Developer Tools) — demand for mobile dev is real.
@@ -64,12 +64,12 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 
 | Goal | Metric | Target |
 |------|--------|--------|
-| Engineers can run agentic workflows via SMS | % of slash commands executable via SMS | 100% of existing commands |
+| Engineers can use Claude Code via SMS | Any text input the user sends is forwarded to their Claude Code instance | 100% of Claude Code capabilities accessible via SMS text |
 | Reduce time-to-action on agent output | Time from agent completion to engineer review/approval | < 60 seconds (SMS notification is instant) |
 | App preview is visible without leaving Messages | Engineer receives app screenshots (mobile + desktop viewport) via MMS | Screenshots delivered within 10 seconds of code change |
 | Code review is viable on a phone | Engineer can review syntax-highlighted diff images via MMS and reply to approve/reject | Diff images are readable when zoomed, cover all changed files |
 | Engineers adopt SMS as a real workflow surface | % of agentic sessions initiated via SMS (among active users) | 40%+ within 3 months |
-| Conversation thread serves as project log | Engineers can scroll back through Messages to see full session history | All commands, responses, and images preserved in thread |
+| Conversation thread serves as project log | Engineers can scroll back through Messages to see full session history | All interactions, responses, and images preserved in thread |
 | Cross-platform from day one | Works on both iPhone and Android | 100% feature parity across platforms |
 | Zero-app experience | Engineer never needs to leave their Messages app during a workflow | 95%+ of interactions are text replies or image review within the thread |
 
@@ -87,8 +87,8 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 ## Target Users
 
 **Primary user:**
-- Description: Software engineers (bootcamp students, junior-to-senior devs) who actively use Claude Code and agentic workflows in their development process. They understand slash commands, multi-agent reviews, git workflows, and deployment pipelines. They have a phone — iPhone or Android.
-- Key needs: Run `/ship`, `/team_three_review`, `/investigate` and other agentic commands from their phone. See live preview of the app. Review diffs. Approve deployments. Stay productive without a laptop — all without installing a new app or owning any hardware beyond their phone.
+- Description: Software engineers (bootcamp students, junior-to-senior devs) who actively use Claude Code and agentic workflows in their development process. They have their own Claude Code setup — custom skills, workflows, review processes — and want to use it from their phone. iPhone or Android.
+- Key needs: Access their Claude Code instance from their phone. Send commands, invoke their skills, see app previews, review diffs, approve deployments. Stay productive without a laptop — all without installing a new app or owning any hardware beyond their phone.
 - Current workaround: SSH into a remote machine via Blink Shell or Termux, run Claude Code in tmux. Or use Claude Code Remote Control (basic, requires laptop running). All workarounds require owning and maintaining additional hardware. Clunky, no rich UI, no live preview, no contextual notifications.
 
 **Secondary user:**
@@ -102,45 +102,58 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 ### In Scope (Requirements)
 
 **P0 — Must have (launch blockers):**
-- [ ] Twilio SMS/MMS integration: service owns a Twilio phone number. Engineer texts this number. Twilio webhooks route to the relay server. Responses sent back via Twilio API.
-- [ ] Docker image for VM environment: a single Docker image containing Claude Code CLI, Playwright MCP, Node.js, git, and Chromium. This image runs identically on a developer's Mac (local) and on Fly.io (production). Build once, run anywhere — no environment differences between local and production.
-- [ ] Thin relay server: lightweight Node.js server that receives Twilio webhooks, authenticates the user by phone number, forwards commands to Claude Code on the user's VM (or local Docker container), and sends responses back via Twilio SMS/MMS. This is the only custom code — Claude Code does all the real work.
-- [ ] Local development mode: relay server + Docker container run on the developer's Mac. ngrok exposes the relay to Twilio webhooks. Hardcoded config (phone number, API keys, GitHub token in `.env` file). Same code, same behavior as production — only the host changes. Cost: ~$3-5/month (Twilio only).
-- [ ] Always-on cloud VM per user (production): Fly.io Machines running the Docker image, one per user, always on — no cold starts, no hibernation. Engineer texts, gets an immediate response.
-- [ ] Automated VM provisioning (production): when a new user signs up, the onboarding backend calls the Fly.io Machines API to create a new VM from the Docker image, passing the user's encrypted credentials as environment variables. No manual setup per user.
-- [ ] Text command input: engineer sends SMS messages (including slash commands like `/ship`, `/investigate`, `/compushar`) to control Claude Code on their VM.
-- [ ] Dictation support: engineer uses their phone's native keyboard dictation (iOS/Android built-in) to speak commands. By the time the SMS reaches the service, it's already text. No voice infrastructure needed on our end.
-- [ ] Agent output as text messages: Claude Code responses sent as SMS replies — concise status updates, phase progress, and plain-text summaries.
-- [ ] Diff images via MMS: server renders syntax-highlighted diffs as PNG images and sends them as MMS photos (one image per file, pinch-to-zoom on phone).
-- [ ] App preview screenshots via MMS: Claude Code captures screenshots of the running app via Playwright MCP (headless browser) and sends them as MMS photos — both mobile viewport (390px) and desktop viewport (1440px).
-- [ ] Playwright MCP pre-installed: every VM comes with the Playwright MCP server configured in `.mcp.json`. Claude Code uses it natively for screenshots, navigation, and page interaction — no custom screenshot pipeline.
-- [ ] Text-based approvals: engineer replies "approve", "reject", "A", "B", etc. to make decisions — no buttons, no links, just text.
-- [ ] GitHub integration: connect to repos, clone branches, create PRs — all triggered via SMS commands.
-- [ ] Session management: start/stop development sessions via SMS ("start session authentic-frontend main", "stop session").
-- [ ] Images served from VM: screenshots and diff images are generated and served from the always-on VM. The relay fetches them and sends via Twilio MMS.
 
-**P1 — Important (needed for beta launch with real users):**
-- [ ] Onboarding website: simple sign-up page where users enter phone number (SMS verification), connect GitHub (OAuth), and enter API keys (BYOK). NOT needed for development or demos — only needed when onboarding other people.
-- [ ] User database: store phone number → VM mapping, encrypted GitHub tokens, encrypted API keys, session state. NOT needed for development (hardcoded `.env` is sufficient).
-- [ ] Conversational app interaction: engineer texts "show me the settings page" or "click the login button" → Claude Code navigates via Playwright MCP → sends new screenshot via MMS.
-- [ ] Multi-agent status updates: when running `/team_three_review`, SMS updates show each agent's progress ("Agent 3/6 complete: Gemini critical review done").
-- [ ] CI/CD status: after PR creation, SMS sends build/deploy status updates ("GitHub Actions: passed. Deployed to staging.").
-- [ ] Change summaries: AI-generated plain-language explanation of what changed and why, sent as text before the diff images.
-- [ ] Slash command help: text "/help" to get a list of available commands with descriptions.
-- [ ] Session history: text "/history" to get a summary of recent sessions, branches, and PRs.
-- [ ] Review summary images: server renders a visual summary of review findings (blockers, warnings, suggestions) as an image.
-- [ ] Composite diff images: when > 5 files change, batch diff images into a single composite image to reduce MMS count. Option to "Reply 'show [filename]' for individual diffs."
-- [ ] Image storage abstraction: `ImageStore` interface with `upload()` and `getUrl()` methods. V1 implementation uses local VM filesystem. Swappable to Cloudflare R2, S3, or other providers later for persistence and scalability.
+_Platform infrastructure — what the service provides:_
+- [ ] Twilio SMS/MMS integration: service owns a Twilio phone number. Engineer texts this number. Twilio webhooks route to the relay server. Responses sent back via Twilio API.
+- [ ] Docker base image: a single Docker image containing Claude Code CLI, Playwright MCP, Node.js, git, and Chromium. This is the runtime environment for every user's VM. Runs identically on a developer's Mac (local) and on Fly.io (production).
+- [ ] Thin relay server: lightweight Node.js server that receives Twilio webhooks, authenticates the user by phone number, looks up their VM, forwards the SMS text to Claude Code on that VM, and sends responses back via Twilio SMS/MMS. This is the platform's only custom code — Claude Code does all the real work.
+- [ ] Phone → VM routing: relay maps each registered phone number to the user's Fly.io VM. Incoming SMS is forwarded to the correct VM. The relay is agnostic to what the user sends — it forwards everything as-is.
+- [ ] Always-on cloud VM per user: Fly.io Machines running the Docker base image, one per user, always on — no cold starts, no hibernation. Engineer texts, gets an immediate response.
+- [ ] Automated VM provisioning: when a new user signs up on the website, the backend calls the Fly.io Machines API to create a new VM from the Docker base image, configured with the user's encrypted credentials. No manual setup per user.
+- [ ] Onboarding website: sign-up page where users enter phone number (SMS verification), connect GitHub (OAuth), and enter API keys (BYOK). Submitting the form triggers VM provisioning. User receives a welcome SMS confirming their instance is ready.
+- [ ] User database: phone number → VM mapping, encrypted GitHub OAuth tokens, encrypted API keys. This is what enables multi-user routing.
+- [ ] Local development mode: relay server + Docker container run on the developer's Mac. ngrok exposes the relay to Twilio webhooks. Hardcoded config (`.env`). Same code, same behavior as production — only the host changes. Cost: ~$3-5/month (Twilio only).
+
+_SMS ↔ Claude Code bridge — the core transport:_
+- [ ] Text input forwarding: engineer sends any SMS text and it's forwarded to Claude Code on their VM. This includes natural language ("add dark mode"), skill invocations (whatever skills the user has configured), or any other input. The relay doesn't interpret the content — it forwards.
+- [ ] Agent output as SMS: Claude Code responses sent back as SMS replies.
+- [ ] Image output as MMS: when Claude Code generates images (screenshots, diffs, etc.), the relay fetches them from the VM and sends via Twilio MMS.
+- [ ] Images served from VM: screenshots and diff images are generated and served from the user's VM. The relay fetches them via HTTP and sends via Twilio MMS.
+- [ ] Playwright MCP pre-installed: every VM comes with the Playwright MCP server configured in `.mcp.json`. Claude Code uses it natively for screenshots, navigation, and page interaction — available to any user workflow that needs it.
+- [ ] Dictation support: engineer uses their phone's native keyboard dictation (iOS/Android built-in) to speak commands. By the time the SMS reaches the service, it's already text. No voice infrastructure needed on our end.
+
+_User-side capabilities — what the user's Claude Code setup provides (not platform features):_
+
+The platform is agnostic to what the user does on their VM. Whatever Claude Code can do on a desktop, it can do via SMS. The user brings their own:
+- Custom skills (`.claude/skills/`) — their workflows, review processes, automation
+- GitHub repos and branches
+- API keys (Claude, Codex, Gemini)
+- Project-specific configuration (CLAUDE.md, .mcp.json, etc.)
+
+The following capabilities work through the platform but are provided by Claude Code, not by the platform itself:
+- Skill invocation (e.g., if the user has a `/ship` skill, they text "/ship add dark mode")
+- Multi-agent orchestration (user's skills may spawn parallel agents)
+- Code review workflows (user's review skills)
+- Diff rendering (Claude Code + the VM's image pipeline)
+- App screenshots via Playwright MCP
+- Git operations, PR creation, deployment triggers
+- Text-based approvals ("approve", "reject")
+- Session management ("start session repo branch", "stop session")
+
+**P1 — Important (needed for a polished beta experience):**
+- [ ] Diff-to-PNG rendering pipeline: built into the Docker base image. Captures `git diff` output and renders as syntax-highlighted PNG images. Available to any user workflow that produces code changes.
+- [ ] Composite diff images: when > 5 files change, batch into a single image to reduce MMS count. Option to "Reply 'show [filename]' for individual diffs."
+- [ ] CI/CD status: relay listens for GitHub Actions webhooks and sends build/deploy status as SMS.
+- [ ] Image storage abstraction: `ImageStore` interface with `upload()` and `getUrl()` methods. V1 uses local VM filesystem. Swappable to Cloudflare R2/S3 later.
+- [ ] MMS image labeling: number/label images to handle out-of-order delivery across carriers.
+- [ ] Logging and monitoring: track message delivery, latency, errors, costs per user.
 
 **P2 — Nice to have (needed for paid launch):**
-- [ ] Stripe integration: credit card payment on the onboarding website. $29/month subscription. NOT needed until you're charging real users.
+- [ ] Stripe integration: credit card payment on the onboarding website. $29/month subscription.
 - [ ] Group SMS threads: tie a group thread to a project — multiple engineers see agent activity, can issue commands.
-- [ ] Native app: a dedicated app for richer interaction — built on top of the same backend.
 - [ ] Multi-project management: manage multiple repos/VMs from different SMS threads (one thread per project).
-- [ ] Cost tracking: text "/cost" to see token usage and VM cost for current session.
-- [ ] Workflow builder: text "/create-command" to define a new slash command via conversation.
-- [ ] Multi-channel expansion: add WhatsApp, Telegram, Discord, Slack as additional transport layers. Same backend, different channels. (OpenClaw's channel abstraction could be useful here.)
-- [ ] Side-by-side before/after screenshots: send a composite image showing the app before and after the agent's changes.
+- [ ] Multi-channel expansion: add WhatsApp, Telegram, Discord, Slack as additional transport layers. Same backend, different channels.
+- [ ] Native app: a dedicated app for richer interaction — built on top of the same backend.
 
 ### Out of Scope (Non-Goals)
 
@@ -149,7 +162,8 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 - Support for non-Claude-Code agents (e.g., Devin, Replit Agent) as the primary runtime. We build on Claude Code, with Codex CLI and Gemini CLI as optional secondary agents.
 - Voice call support in V1. Input is text — typed or dictated via the phone's native keyboard.
 - Offline mode. This product requires a cell signal to send/receive SMS.
-- Self-hosted VM management. V1 uses a managed cloud provider. Users don't manage infrastructure.
+- Self-hosted VM management. V1 uses a managed cloud provider. Users don't manage infrastructure — they sign up, get a VM, and text.
+- Opinionated workflows. The platform doesn't dictate what skills or workflows users should have. It provides the SMS bridge; users bring their own Claude Code setup.
 - Real-time streaming inside SMS. SMS delivers complete messages, not character-by-character streams. Agent progress is sent as periodic status updates ("Phase 2 of 11 complete...").
 - OpenClaw integration in V1. The architecture is a thin relay server talking directly to Claude Code. OpenClaw could be considered in the future if multi-channel expansion (WhatsApp, Telegram, Discord) becomes a priority.
 
@@ -157,38 +171,28 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 
 ## User Flows
 
-**Flow 1: Onboarding (phased — grows with the product)**
+_Note: The flows below illustrate the SMS experience using example Claude Code skills and workflows. The specific skills shown (e.g., a "ship" workflow, a multi-agent investigation) are examples of what a user might have configured in their own Claude Code setup. The platform is agnostic — it forwards text and delivers images. What happens on the VM is determined by the user's Claude Code configuration._
 
-_Development & Demo (no website needed):_
-1. Developer hardcodes phone number, GitHub token, and API keys in `.env`
-2. Starts Docker container + relay server on their Mac
-3. Starts ngrok to expose relay to Twilio
-4. Texts the Twilio number — it works. That's it.
+**Flow 1: Onboarding**
 
-_Beta (invite-only, free):_
-1. Engineer visits simple signup page
+1. Engineer visits the signup page
 2. Enters phone number (Twilio sends SMS verification code)
 3. Connects GitHub account (OAuth)
 4. Enters API keys: Claude (required), Codex (optional), Gemini (optional)
-5. Backend auto-provisions their Fly.io VM
-6. Receives an SMS: "You're set up. Text me to start. Try: start session [repo-name] [branch]"
-7. Done. No payment required during beta.
+5. Backend auto-provisions their Fly.io VM with the Docker base image + their credentials
+6. Receives an SMS: "You're set up. Text me anything to start."
+7. Done. The engineer now has their own always-on Claude Code instance accessible via SMS.
 
-_Paid launch:_
-1. Same as beta, plus Stripe payment ($29/month) before VM is provisioned
-2. Everything else identical
-
-**Flow 2: Start a new development session**
-1. User sends SMS: "start session authentic-frontend main"
+**Flow 2: Start working**
+1. User sends SMS: "clone authentic-frontend and start the dev server on main"
 2. System replies: "Cloning authentic-frontend (branch: main)... Installing dependencies..."
-3. System replies: "Session ready. Dev server running. Here's your app:"
+3. System replies: "Dev server running. Here's your app:"
 4. System sends MMS: [app-screenshot-mobile.png] [app-screenshot-desktop.png]
-5. System replies: "Type /help for available commands."
-6. User is ready to issue commands — never left Messages
+5. User is ready to work — never left Messages
 
-**Flow 3: Run an agentic workflow**
+**Flow 3: Run a workflow (example: user has a "ship" skill)**
 1. User sends SMS: "/ship add a dark mode toggle to the settings page"
-2. System replies: "Starting /ship workflow (11 phases). I'll text you at each milestone."
+2. System replies: "Starting /ship workflow. I'll text you at each milestone."
 3. System replies: "[1/11] Planning complete. Will modify: SettingsPage.tsx, theme.ts, ThemeContext.tsx. Adding: dark-mode.test.ts"
 4. System replies: "[3/11] Implementation done. 4 files changed, +187 lines."
 5. System sends diff images via MMS: [diff-theme.ts.png] [diff-SettingsPage.tsx.png] [diff-ThemeContext.tsx.png] [diff-dark-mode.test.ts.png]
@@ -199,10 +203,10 @@ _Paid launch:_
 10. System replies: "PR #47 created: 'Add dark mode toggle to settings page'. GitHub Actions: building... passed. Deployed to staging."
 11. System sends staging screenshot via MMS: [staging-screenshot.png]
 
-**Flow 4: Voice-dictated workflow**
+**Flow 4: Voice-dictated command**
 1. User holds the microphone button on their keyboard and speaks: "investigate why the checkout page is returning 500 errors on the payments endpoint"
 2. Phone's native dictation converts speech to text. SMS is sent as plain text.
-3. System replies: "Starting /investigate..."
+3. System replies: "Investigating..."
 4. System replies: "Spawned 3 investigation agents (Claude, Codex, Gemini). Running in parallel..."
 5. System replies (2 min later): "Agent 1/3 complete (Claude): suspects null reference in paymentService.ts"
 6. System replies (3 min later): "All 3 agents complete. Synthesizing findings..."
@@ -213,8 +217,8 @@ _Paid launch:_
 11. System replies: "Fix applied. PR #48 created. Here's the app now:"
 12. System sends MMS: [app-checkout-fixed.png]
 
-**Flow 5: Review code changes**
-1. User receives SMS: "/team_three_review complete. 14 findings across 6 agents."
+**Flow 5: Review code changes (example: user has a multi-agent review skill)**
+1. User receives SMS: "Review complete. 14 findings across 6 agents."
 2. System sends review summary: "3 blockers | 5 important | 6 suggestions"
 3. System sends MMS: [review-summary.png] — a visual summary card showing findings grouped by severity
 4. System lists blockers inline:
@@ -237,8 +241,8 @@ _Paid launch:_
 5. User sends: "looks good. now show me the login page in dark mode"
 6. System sends MMS: [app-login-dark-mode-mobile.png] [app-login-dark-mode-desktop.png]
 
-**Flow 7: Quick commands**
-1. User sends: "/compushar fix login validation bug"
+**Flow 7: Quick command**
+1. User sends: "fix the login validation bug, commit and push"
 2. System replies: "Committed: 'fix: add null check to login validation'. Pushed to branch aut-92-login-fix. PR #49 created."
 3. System sends MMS: [diff-loginValidation.ts.png]
 
@@ -253,10 +257,10 @@ _Paid launch:_
 - VM goes down or restarts — SMS: "Your session was interrupted. Last state saved at commit abc123. Reply 'resume' to pick up where you left off."
 - Network interruption on phone — agent keeps working on VM. All SMS/MMS updates queue in Twilio and deliver when connection resumes.
 - Agent gets stuck (thrashing detection) — SMS: "Agent may be stuck (3 failed attempts on the same issue). Reply 'fresh' to spawn a fresh agent, or 'stop' to cancel."
-- Multiple workflows running simultaneously — each update is prefixed with the workflow name: "[/ship] Phase 4 complete..." "[/investigate] Agent 2/3 done..."
+- Multiple workflows running simultaneously — each update is prefixed with the workflow name: "[ship] Phase 4 complete..." "[investigate] Agent 2/3 done..."
 - Large diffs (100+ files) — system sends summary text + a composite overview image showing all file names and change counts, then asks "Reply 'show auth.ts' to see a specific file's diff"
 - Dictation errors — system replies: "Received: 'fix the log in paje'. Did you mean: 'fix the login page'? Reply 'yes' or re-record."
-- User sends a message while a workflow is running — system queues it and replies: "I'm currently running /ship (Phase 6/11). I'll process your next command when this completes. Reply 'cancel' to stop the current workflow."
+- User sends a message while a workflow is running — system queues it and replies: "I'm currently working on your last request. I'll process your next message when this completes. Reply 'cancel' to stop."
 - Too many images in thread — system batches diff images into a single composite image when > 5 files change, with an option to "Reply 'show [filename]' for individual diffs"
 - SMS character limit (160 chars per segment) — long responses are sent as multi-segment SMS (Twilio handles concatenation automatically, charged per segment)
 
@@ -289,7 +293,7 @@ _Radically simple. The engineer owns nothing but a phone._
 │  │           Native Messages App                    │ │
 │  │           (pre-installed on every phone)          │ │
 │  │                                                   │ │
-│  │  You: /ship add dark mode                        │ │
+│  │  You: add dark mode to the settings page          │ │
 │  │                                                   │ │
 │  │  Bot: [1/11] Planning complete.                  │ │
 │  │  Modifying: theme.ts, SettingsPage.tsx           │ │
@@ -374,8 +378,8 @@ _Radically simple. The engineer owns nothing but a phone._
 │                                                       │
 │  ┌────────────────────────────────────────────────┐  │
 │  │ Claude Code CLI (headless mode)                 │  │
-│  │ - Receives commands from relay                  │  │
-│  │ - Executes slash commands (/ship, /investigate) │  │
+│  │ - Receives text from relay                      │  │
+│  │ - Executes user's skills and commands           │  │
 │  │ - Orchestrates multi-agent workflows            │  │
 │  │ - Returns text output + triggers screenshots    │  │
 │  └─────────┬──────────────────────────────────────┘  │
@@ -423,24 +427,42 @@ WHAT THE USER PROVIDES:          WHAT THE SERVICE PROVIDES:
 - A phone (any phone)           - Twilio phone number + SMS/MMS
 - Cell signal or WiFi           - Relay server (~200 lines)
 - GitHub account                - Always-on cloud VM per user
-- API keys (BYOK)              - Claude Code CLI (pre-installed)
-- Monthly subscription          - Playwright MCP (pre-configured)
-                                - Dev server runtime
-                                - Image generation pipeline
-                                - User database + session mgmt
+- API keys (BYOK)              - Docker base image (Claude Code
+- Their Claude Code setup         + Playwright MCP + Chromium)
+  (skills, workflows, config)   - Onboarding website + database
+- Monthly subscription          - VM provisioning pipeline
+                                - Image pipeline (VM → MMS)
                                 - All infrastructure + ops
 ```
 
 ### Why This Architecture Is Simple
 
-The key insight: **Claude Code already does everything.** It handles slash commands, multi-agent orchestration, Playwright screenshots, git operations, code review, and deployment. The only missing piece was a way to send it commands from a phone.
+The key insight: **Claude Code already does everything.** Each user has their own Claude Code setup — custom skills, multi-agent workflows, review processes, deployment pipelines. The only missing piece was a way to access it from a phone.
 
-The relay server is not an orchestration layer. It's a translator:
-- SMS text → Claude Code command
-- Claude Code output → SMS text
-- Claude Code screenshot → MMS image
+The relay server is not an orchestration layer. It's a dumb pipe:
+- SMS text in → forward to user's Claude Code instance
+- Claude Code text out → SMS back to user
+- Claude Code generates image → fetch from VM, send as MMS
 
-That's it. ~200-300 lines of code. One server. One VM per user. Twilio handles messaging. Claude Code handles engineering.
+That's it. ~200-300 lines of code. One relay server routing to many VMs. Twilio handles messaging. Claude Code handles engineering. The platform doesn't know or care what the user is doing on their VM.
+
+### Platform vs. User Boundary
+
+The platform provides the bridge. The user provides the intelligence.
+
+```
+PLATFORM (what we build):              USER (what they bring):
+──────────────────────────             ────────────────────────
+- Twilio phone number + SMS/MMS       - Their Claude Code setup
+- Relay server (text forwarding)       - Custom skills (.claude/skills/)
+- VM provisioning (Fly.io)             - CLAUDE.md configuration
+- Docker base image                    - GitHub repos and branches
+- Image pipeline (VM → MMS)           - API keys (BYOK)
+- Onboarding website + database       - Their workflows and processes
+- Phone → VM routing                  - Project-specific .mcp.json
+```
+
+The relay is deliberately dumb. It doesn't parse skill names, interpret commands, or understand workflow state. It forwards text and delivers images. All intelligence lives in Claude Code on the user's VM.
 
 ### Docker-First Development (Local → Production with Zero Friction)
 
@@ -450,7 +472,7 @@ Everything runs inside a Docker container from day one — even during local dev
 - Claude Code CLI (headless mode)
 - Playwright MCP (pre-configured in `.mcp.json`)
 - Node.js, git, Chromium
-- Thin API wrapper (HTTP endpoint that accepts commands, returns output + image paths)
+- Thin API wrapper (HTTP endpoint that accepts commands/skill invocations, returns output + image paths)
 - Image directory (`/tmp/images/`) served via HTTP
 
 **The same image runs everywhere:**
@@ -546,28 +568,26 @@ When ready to deploy for real users, push the same Docker image to Fly.io. The r
                                                         └─────────────────────┘
 ```
 
-### Phased Onboarding (Build Only What You Need, When You Need It)
-
-The onboarding system grows with the product. You don't build a signup page until you have users. You don't add Stripe until you're charging.
+### Onboarding Flow
 
 ```
-DEVELOPMENT & DEMO          BETA (FREE)                 PAID LAUNCH
-────────────────────        ─────────────────           ──────────────────
-.env file with:             Simple signup page:         Full signup page:
-- Your phone number         - Phone verification        - Phone verification
-- Your GitHub token         - GitHub OAuth              - GitHub OAuth
-- Your API keys             - API key entry             - API key entry
-                            - Auto-provision VM         - Stripe payment
-No database.                                            - Auto-provision VM
-No website.                 Database:
-No Stripe.                  - phone → VM mapping        Everything from Beta
-                            - encrypted credentials     + payment processing
+DEVELOPMENT (your Mac)       PRODUCTION (Fly.io)          PAID LAUNCH
+────────────────────         ────────────────────         ──────────────────
+.env file with:              Signup page:                 Signup page:
+- Your phone number          - Phone verification         - Phone verification
+- Your GitHub token          - GitHub OAuth               - GitHub OAuth
+- Your API keys              - API key entry              - API key entry
+                             - Auto-provision VM          - Stripe payment
+No database.                                              - Auto-provision VM
+No website.                  Database:
+No Stripe.                   - phone → VM mapping         Everything from prod
+                             - encrypted credentials      + payment processing
 Just text and go.
 ```
 
-**Development & Demo mode:** The relay server reads from `.env`. One phone number, one set of credentials, one Docker container. You text, it works. When you demo in front of people, they see the SMS experience on your phone screen — indistinguishable from the production product.
+**Development mode:** For building and testing the platform. The relay reads from `.env`. One phone number, one Docker container. You text, it works.
 
-**Beta mode:** Add a simple signup page (Vercel) and a database (Supabase free tier). Users enter their info, backend calls Fly.io Machines API to auto-provision their VM. No payment — you're validating demand.
+**Production mode:** Users sign up on the website, get a VM provisioned automatically, and start texting. The relay routes their phone number to their VM.
 
 **Paid launch:** Add Stripe to the signup page. Payment triggers VM provisioning. Everything else is identical.
 
@@ -622,8 +642,8 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 - SMS/MMS delivery latency is acceptable for development workflows (typically < 3 seconds for SMS, < 10 seconds for MMS)
 - The conversational screenshot pattern ("show me the settings page" → screenshot) is sufficient for app preview without a live browser
 - Engineers prefer using an interface that requires zero installation (SMS) over downloading a new app
-- Claude Code CLI can be reliably driven headlessly (`claude -p` / `claude --headless`) for all slash commands
-- Phone keyboard dictation (iOS/Android built-in) is accurate enough for programming commands and slash command names
+- Claude Code CLI can be reliably driven headlessly (`claude -p` / `claude --headless`) for all user workflows. The relay forwards the user's text as the prompt — Claude Code handles everything else natively.
+- Phone keyboard dictation (iOS/Android built-in) is accurate enough for programming terminology (e.g., "fix the login page", "show me the settings component")
 - MMS can handle the volume of images generated during a development session (estimated 20-50 images per hour during active development) without carrier throttling
 
 **Constraints** (hard limits):
@@ -652,16 +672,17 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 
 | Question / Risk | Owner | Status | Resolution |
 |-----------------|-------|--------|------------|
-| Can Claude Code CLI be driven headlessly at sufficient reliability for all 11+ slash commands? | Emmanuel | Open | Extensive testing required. Some commands spawn sub-agents that may behave differently headlessly. |
+| Can Claude Code CLI be driven headlessly at sufficient reliability for all user workflows? | Emmanuel | Open | Extensive testing required. Some workflows spawn sub-agents that may behave differently headlessly. The platform needs to work with any Claude Code setup, not just specific skills. |
 | Will MMS images arrive in the correct order, or do we need to label/number them? | Emmanuel | Open | Test with Twilio — send 5+ MMS in sequence and verify delivery order across carriers (AT&T, T-Mobile, Verizon). |
 | Will carrier spam filters block high-volume automated SMS from a Twilio number? | Emmanuel | Open | Register for A2P 10DLC via Twilio. Test sustained message volume (50+ messages/hour to a single number). |
 | What's the right VM provider for cost, speed, and always-on reliability? | Emmanuel | Decided | **Fly.io** — cheapest option (~$5/month per VM), Docker-native, Machines API for automated provisioning. |
 | What's the minimum viable pricing model that covers infrastructure costs? | Emmanuel | Decided | **$29/month** per user. Infrastructure cost ~$26/month for a power user (Fly.io VM $5 + Twilio $20 + relay $1). ~$3/month margin at heaviest usage, more for lighter users. |
 | How do we handle API key management — BYOK for V1, managed keys later? | Emmanuel | Open | BYOK for V1 to avoid cost liability. Managed tier is a future revenue model. |
-| What happens when a long-running workflow (e.g., `/ship` — 30+ min) generates dozens of status updates and images? Will it overwhelm the SMS thread? | Emmanuel | Open | Design message batching and summary patterns. Don't spam the user — send milestone updates, not every line of output. |
+| What happens when a long-running workflow (30+ min) generates dozens of status updates and images? Will it overwhelm the SMS thread? | Emmanuel | Open | Design message batching and summary patterns. Don't spam the user — send milestone updates, not every line of output. |
 | How do we securely store user API keys and GitHub tokens in a multi-tenant cloud service? | Emmanuel | Open | Encrypted at rest (AES-256), per-user encryption keys, never stored in plain text, never logged. |
-| Is phone keyboard dictation accurate enough for programming terminology? (e.g., "slash ship", "paymentService.ts") | Emmanuel | Open | Test with 50+ sample dictated commands from engineers on both iOS and Android. |
+| Is phone keyboard dictation accurate enough for programming terminology? (e.g., "paymentService.ts", "fix the auth middleware") | Emmanuel | Open | Test with 50+ sample dictated commands from engineers on both iOS and Android. |
 | How do we handle the `ImageStore` migration from local VM to R2/S3 when scaling? | Emmanuel | Open | Design the interface now, implement local-only for V1. Migration is a config change, not a rewrite. |
+| How does the user configure their Claude Code setup on the VM? (clone their repo with .claude/skills/? Pre-configure during onboarding?) | Emmanuel | Open | Users need their custom skills, CLAUDE.md, and .mcp.json on the VM. Options: clone their config repo during onboarding, provide a "setup" command via SMS, or let them configure via their first session. |
 
 ---
 
@@ -678,7 +699,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 | Relay server prototype | TBD | Twilio webhook → ngrok → relay → Claude Code in Docker → response back via SMS. All on your Mac. |
 | Screenshot pipeline | TBD | Claude Code uses Playwright MCP inside Docker to capture app screenshots, relay sends via MMS |
 | Diff image pipeline | TBD | Syntax-highlighted diff rendering to PNG inside Docker, sent via relay as MMS |
-| End-to-end local flow | TBD | Full loop on your Mac: text service number → relay → Claude Code in Docker → /ship → diffs + screenshots → approve → PR created. All from your phone. |
+| End-to-end local flow | TBD | Full loop on your Mac: text service number → relay → Claude Code in Docker → run a workflow → diffs + screenshots → approve → PR created. All from your phone. |
 
 ### Phase B: Deploy to Production (Fly.io, ~$200 upfront)
 
@@ -689,7 +710,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 | Update Twilio webhook URL | TBD | Point Twilio to Fly.io public URL instead of ngrok |
 | Automated VM provisioning | TBD | Onboarding backend calls Fly.io Machines API to create per-user VMs on signup |
 | Onboarding website | TBD | Sign up, connect GitHub, enter API keys. Simple web form on Vercel. |
-| End-to-end production flow | TBD | Full loop: sign up → text service number → VM auto-created → /ship → diffs + screenshots → approve → PR. Laptop closed the whole time. |
+| End-to-end production flow | TBD | Full loop: sign up → text service number → VM auto-created → run a workflow → diffs + screenshots → approve → PR. Laptop closed the whole time. |
 
 ### Phase C: Beta & Scale
 
@@ -712,7 +733,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
   - **Phase 3 (Command):** Relay routes text commands to Claude Code in Docker. Agent responses come back as SMS. Text-only, no images yet.
   - **Phase 4 (Screenshots):** Claude Code uses Playwright MCP inside Docker to capture app screenshots. Relay sends them as MMS.
   - **Phase 5 (Diff images):** Add syntax-highlighted diff rendering. Code changes rendered as PNG, sent as MMS alongside screenshots.
-  - **Phase 6 (End-to-end local):** Full `/ship` workflow from your phone, all running on your Mac in Docker. Validate the complete experience.
+  - **Phase 6 (End-to-end local):** Full workflow from your phone, all running on your Mac in Docker. Validate the complete experience.
 
   **Production Deployment (Fly.io):**
   - **Phase 7 (Deploy):** Push Docker image to Fly.io. Deploy relay server. Swap Twilio webhook URL. Same code, different host.
@@ -722,7 +743,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
   **Scale & Polish:**
   - **Phase 10 (Beta):** Invite 10 bootcamp engineers. Monitor costs, reliability, MMS delivery across carriers.
   - **Phase 11 (Conversational navigation):** Engineer texts "show me the login page" → Claude Code navigates via Playwright MCP → sends screenshot via MMS.
-  - **Phase 12 (Multi-agent):** Add status updates for parallel agent workflows (`/team_three_review`, `/investigate`). Send review summary images.
+  - **Phase 12 (Multi-agent):** Add status updates for parallel agent workflows. Send review summary images.
   - **Phase 13 (CI/CD):** Deployment status updates and CI/CD integration (GitHub Actions, Vercel).
   - **Phase 14 (Polish):** Session management, error handling, `/help`, `/history`, `/cost`, composite images, MMS delivery order handling.
 
@@ -779,13 +800,12 @@ Everything runs on your Mac during development. Minimal spend.
 
 ### Cost Per Workflow (Estimated)
 
-| Workflow | SMS messages | MMS images | Twilio cost |
-|----------|------------|------------|-------------|
-| `/ship` (full 11-phase) | ~15 texts | ~10 images | ~$0.32 |
-| `/compushar` (quick commit+PR) | ~3 texts | ~2 images | ~$0.06 |
-| `/investigate` (3-agent) | ~8 texts | ~3 images | ~$0.12 |
-| `/team_three_review` (6-agent) | ~10 texts | ~5 images | ~$0.18 |
-| Simple command ("status", "show me X") | ~2 texts | ~1 image | ~$0.04 |
+| Workflow Type | SMS messages | MMS images | Twilio cost |
+|--------------|------------|------------|-------------|
+| Heavy workflow (multi-phase implementation) | ~15 texts | ~10 images | ~$0.32 |
+| Medium workflow (multi-agent investigation) | ~8 texts | ~3 images | ~$0.12 |
+| Light workflow (quick commit + PR) | ~3 texts | ~2 images | ~$0.06 |
+| Simple command ("show me the app", "status") | ~2 texts | ~1 image | ~$0.04 |
 
 ### Cost Per User Per Month (Power User on Fly.io)
 
@@ -853,7 +873,7 @@ _Note: This is significantly cheaper than the iMessage approach, which required 
 ## Appendix
 
 ### Competitive Landscape
-- [Authentic's Agentic Engineering Techniques](./README.md) — The workflow system this product exposes via SMS
+- [Authentic's Agentic Engineering Techniques](./README.md) — Example Claude Code skill library (this repo's own skills are used for development/testing)
 - [Claude Code Remote Control docs](https://code.claude.com/docs/en/remote-control) — Anthropic's basic remote access feature (Feb 2026)
 - [Kibbler](https://kibbler.dev/) — Third-party Claude Code mobile wrapper with voice + diffs (requires iOS app install)
 - [Moshi](https://getmoshi.app/) — iOS terminal with push notifications for Claude Code (requires iOS app install)
@@ -865,7 +885,7 @@ _Note: This is significantly cheaper than the iMessage approach, which required 
 ### Key Architectural Decision: Why Not OpenClaw?
 OpenClaw was evaluated as a potential orchestration layer. It provides multi-channel messaging, browser automation, and Claude Code integration via plugins. However:
 - **SMS is not a first-class channel** — would require building a custom extension or using the community Clawphone plugin (voice-first, SMS secondary).
-- **Claude Code already does everything** — slash commands, multi-agent orchestration, Playwright MCP, git operations. OpenClaw would be a middleman adding complexity without capability.
+- **Claude Code already does everything** — the user's skills, multi-agent orchestration, Playwright MCP, git operations. OpenClaw would be a middleman adding complexity without capability.
 - **The relay is trivially simple** — ~200-300 lines of code. Not worth adding a dependency on a full orchestration platform.
 - **Future consideration:** If multi-channel expansion (WhatsApp, Telegram, Discord) becomes a priority, OpenClaw's channel abstraction could accelerate that work. The backend is designed to be transport-agnostic.
 
