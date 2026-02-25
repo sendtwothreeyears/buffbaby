@@ -1,5 +1,5 @@
 ---
-name: review-criteria:code-review
+name: code-review
 description: "Standard code review criteria: architectural, tactical, and stakeholder perspectives"
 user-invocable: false
 ---

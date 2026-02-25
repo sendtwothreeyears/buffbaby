@@ -1,5 +1,5 @@
 ---
-name: review-criteria:code-review-critical
+name: code-review-critical
 description: "Critical/adversarial code review: failure modes, edge cases, security, race conditions"
 user-invocable: false
 ---

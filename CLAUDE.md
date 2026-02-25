@@ -47,9 +47,8 @@ The current developer's name is derived from `git config user.name`.
 | `docs/brainstorms/` | Brainstorm documents from `/workflow:brainstorm` |
 | `docs/solutions/` | Solved problems documented by `/workflow:compound` |
 | `notes/` | Temporary notes, review artifacts (gitignored) |
-| `.claude/commands/` | Slash commands organized by folder |
-| `.claude/skills/` | Skills loaded by commands |
-| `.claude/subagents/` | Subagent definitions for research tasks |
+| `.claude/skills/` | All skills in flat structure (prefixed by category, e.g., `workflow:brainstorm`, `utilities:compushar`, `code-review`) |
+| `.claude/subagents/` | Shared subagent definitions used by workflow skills |
 
 ## Workflow
 
@@ -58,36 +57,51 @@ The current developer's name is derived from `git config user.name`.
 The core development loop. Each phase of the project cycles through steps 2–6:
 
 ```
-1. /workflow:phase-prd ─── Split PRD into sequenced phases (once, at project start)
+1. /workflow:phase-prd ──── Split PRD into sequenced phases (once, at project start)
        │
        ▼
-2. /workflow:brainstorm ── Explore what to build for this phase
-       │
+2. /workflow:brainstorm ─── Explore what to build for this phase
+       │                    ↕ /workflow:document-review (optional refinement)
        ▼
-3. /workflow:plan ──────── Structure how to build it → docs/plans/
-       │
+3. /workflow:plan ───────── Structure how to build it → docs/plans/
+       │                    ↕ /workflow:document-review (optional refinement)
        ▼
-4. /workflow:ship ──────── Implement + code review (via code_review criteria) + PR
-       │
+4. /workflow:ship ───────── Implement + code review + PR
+       │                    Uses: code-review, code-review-critical
+       │                    Uses: subagents (learnings-researcher, code-simplicity-reviewer)
        ▼
-5. /workflow:phase-review ─ Validate the phase is done (PASS/FAIL)
-       │
+5. /workflow:phase-review ── Validate the phase is done (PASS/FAIL)
+       │                     Uses: subagent (learnings-researcher)
        ▼
-6. /workflow:compound ──── Document what you learned → docs/solutions/
+6. /workflow:compound ───── Document what you learned → docs/solutions/
        │
        └──► Next phase → back to step 2
 ```
 
-### Review Criteria (used internally by `/workflow:ship`)
+### Review Criteria (used internally by workflow skills)
 
-- `review-criteria:code_review` — standard review (architectural, tactical, stakeholder perspectives)
-- `review-criteria:code_review_critical` — adversarial review (failure modes, edge cases, security)
+- `code-review` — standard review (architectural, tactical, stakeholder perspectives)
+- `code-review-critical` — adversarial review (failure modes, edge cases, security)
+
+### Subagents (shared research agents in `.claude/subagents/`)
+
+| Subagent | Purpose | Used by |
+|----------|---------|---------|
+| `learnings-researcher` | Search `docs/solutions/` for past learnings | brainstorm, plan, ship, phase-review |
+| `repo-research-analyst` | Analyze repo structure and patterns | brainstorm, plan |
+| `best-practices-researcher` | Research external best practices | plan |
+| `framework-docs-researcher` | Research framework documentation | plan |
+| `spec-flow-analyzer` | Analyze feature specs for gaps | plan |
+| `code-simplicity-reviewer` | YAGNI and simplification review | ship |
 
 ### Utilities (standalone tools)
 
 - `utilities:compushar` — quick commit → push → PR
 - `utilities:fix-the-things` — automated environment repair
-- `utilities:investigate` — multi-perspective bug investigation
+- `utilities:investigate` — multi-agent bug investigation (Claude + Codex + Gemini)
+- `utilities:wrap-it-up` — quad-agent code review, fix, commit, PR, sanity check
+- `utilities:meta-learn` — extract and document learnings
+- `utilities:capture-skill` — save workflows as reusable skills
 
 ## Communication Style
 

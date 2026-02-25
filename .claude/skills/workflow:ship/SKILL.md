@@ -87,7 +87,7 @@ If context is compacted:
 │                                                                             │
 │  Phase 3: Code Review                                                       │
 │     ├─► Surface institutional knowledge (learnings-researcher)              │
-│     ├─► Self-review using review-criteria:code-review criteria              │
+│     ├─► Self-review using code-review criteria                              │
 │     ├─► Validate each finding                                               │
 │     ├─► Fix confirmed issues                                                │
 │     └─► Simplicity pass (code-simplicity-reviewer)                          │
@@ -288,7 +288,7 @@ If relevant learnings are found, use them to inform the review — watch for pre
 
 ### 3.1 Self-Review
 
-Review your own changes using the `review-criteria:code-review` skill criteria:
+Review your own changes using the `code-review` skill criteria:
 
 1. **Get the diff:**
    ```bash
