@@ -27,7 +27,7 @@ Deliverables:
 
 ## Notes
 
-- **CRITICAL: `--dangerously-skip-permissions` is required.** `claude -p` without this flag will hang on any prompt that triggers tool use (file writes, bash commands) waiting for confirmation that never comes. Use `claude -p --dangerously-skip-permissions "prompt"` for single-turn execution.
+- **`--dangerously-skip-permissions` is required in Docker.** There is no interactive TTY in the container to approve tool use, so `claude -p` would hang waiting for confirmation that never comes. The flag auto-approves all tool use — which is safe here because Docker itself is the sandbox. Use `claude -p --dangerously-skip-permissions "prompt"` for single-turn execution.
 - The HTTP API wrapper spawns `claude -p` as a child process. Use `child_process.execFile` or `spawn` (not `exec`) to avoid shell injection. Capture both stdout and stderr.
 - Set a maximum execution timeout on the child process (5-10 minutes) to prevent zombie processes.
 - The response shape `{ text: "...", images: [] }` is designed for forward-compatibility with Phase 4 (Screenshots). The `images` array will carry `{ type: "screenshot"|"diff", url: "/images/xxx.png" }` objects once the image pipeline is built.
