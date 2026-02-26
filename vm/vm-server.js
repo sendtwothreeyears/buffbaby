@@ -100,6 +100,7 @@ app.post("/command", (req, res) => {
     clearTimeout(timer);
     busy = false;
     activeChild = null;
+    lastActivity = Date.now();
     const durationMs = Date.now() - start;
     const textOut = Buffer.concat(stdoutChunks).toString();
     const stderrOut = Buffer.concat(stderrChunks).toString();
