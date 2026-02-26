@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.git/
+notes/
+archive/
+docs/
+.claude/
+*.md
+!README.md

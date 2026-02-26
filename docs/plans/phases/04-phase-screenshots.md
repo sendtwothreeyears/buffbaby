@@ -6,35 +6,32 @@
 
 ## What You Build
 
-Claude Code uses Playwright MCP inside the Docker container to capture screenshots of a running dev server. The Docker container serves screenshots via an HTTP endpoint. The relay fetches the screenshot from the container and sends it via Twilio MMS.
+Claude Code calls `POST /screenshot` on the VM server, which uses Playwright to capture screenshots. The VM server tracks images produced during each `/command` execution and includes them in the response. The relay proxies images from the VM and sends them to the user via Twilio MMS.
 
 This phase adds one new capability: **images flow from the VM to the phone**.
 
 Deliverables:
-- Playwright MCP configured and working inside Docker (headless Chromium, `--no-sandbox`)
-- Screenshots captured at **2x device pixel ratio** (retina quality) at both **mobile (390px)** and **desktop (1440px)** viewports for readability when pinch-to-zoomed on a phone
-- **ImageStore interface** with `upload(buffer, filename)` and `getUrl(filename)` methods. V1 implementation: local filesystem (`/tmp/images/`). Swappable to R2/S3 later.
-- Image serving endpoint in the Docker container: `GET /images/:filename` serves files from `/tmp/images/` (already stubbed in Phase 2)
-- **Structured image response:** The API wrapper's `/command` response includes images in the `images` array: `{ text: "...", images: [{ type: "screenshot", url: "/images/screenshot-123.png" }] }`. The relay reads this array — no regex parsing of Claude Code's free-text output.
-- Relay updated: reads `images` array from response, fetches each from `CLAUDE_HOST`, sends via Twilio MMS
-- **Playwright screenshot-to-file pipeline:** A wrapper that takes Playwright MCP's base64-encoded screenshot output, decodes it, saves to `/tmp/images/` with a UUID filename, and registers it in the response's `images` array
-- A sample dev server (simple Vite or Next.js app) running inside Docker for Playwright to screenshot
-- Images compressed to < 1MB: JPEG for screenshots (photo-quality UI), PNG reserved for diffs (Phase 5)
+- `POST /screenshot` VM endpoint — Playwright captures JPEG screenshots with iterative compression
+- Screenshots at **2x DPR** at both **mobile (390x844)** and **desktop (1440x900)** viewports
+- `pendingImages` array tracks screenshots per `/command` execution — included in response `images` field
+- Image serving: `GET /images/:filename` on VM (Phase 2 stub), `GET /images/:filename` proxy on relay
+- Relay sends MMS via Twilio `mediaUrl` when images are present in response
+- `vm/CLAUDE.md` documents `/screenshot` endpoint so Claude Code knows how to use it
+- Static test app (`vm/test-app/index.html`) served on port 8080 for end-to-end testing
+- TTL-based image cleanup (30-min expiry, 100-file cap)
+- JPEG compression to < 600KB target, < 1MB hard ceiling
 
 ## Tasks
 
-- [ ] Configure Playwright MCP in Docker, build ImageStore interface, add structured image response to API, relay fetches screenshots and sends via Twilio MMS
-  - Plan: `/workflow:plan screenshot pipeline — Playwright MCP, ImageStore interface, structured JSON response, relay MMS delivery`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-screenshot-pipeline-plan.md`
-
-- [ ] Start a sample dev server (Vite or Next.js) inside the Docker container that Playwright can capture
-  - Plan: `/workflow:plan sample dev server inside Docker for Playwright screenshot testing`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-sample-dev-server-plan.md`
+- [x] Implement screenshot pipeline: `POST /screenshot` endpoint, pendingImages tracking, relay image proxy, MMS delivery
+  - Plan: `docs/plans/2026-02-26-feat-phase-4-screenshots-plan.md`
+  - Ship: `/workflow:ship docs/plans/2026-02-26-feat-phase-4-screenshots-plan.md`
 
 ## Notes
 
-- Playwright MCP is already configured in `.mcp.json` — Claude Code calls its tools natively (e.g., `browser_screenshot`, `browser_navigate`).
-- The structured JSON approach for image delivery avoids fragile regex parsing. The API wrapper knows when screenshots are taken (it's running the command) and includes them in the response. The relay never parses Claude Code's free-text output for image paths.
-- Consider how the relay knows the Docker container's image URL. In local dev: `http://localhost:3000/images/screenshot-123.png`. In production: `https://user-vm.fly.dev/images/screenshot-123.png`. This is a `.env` config (`IMAGE_HOST`).
-- `/tmp/images/` is volatile — container restarts clear it. Acceptable for local dev. For production (Phase 7+), images need to persist long enough for the relay to fetch them. Fly.io volumes or a cleanup TTL should be considered.
-- Image filenames should use UUIDs to prevent guessing. In production, add token-based auth to the image endpoint.
+- Claude Code calls `curl POST http://localhost:3001/screenshot` during `/command` execution — the VM server tracks the resulting image and includes it in the `/command` response
+- The structured JSON approach avoids fragile regex parsing of Claude Code's free-text output
+- The relay constructs public URLs (`PUBLIC_URL + /images/filename`) and passes them to Twilio as `mediaUrl` — Twilio asynchronously fetches images from the relay proxy
+- `/tmp/images/` is volatile — container restarts clear it. 30-minute TTL cleanup prevents disk fill. For production (Phase 7+), Fly.io volumes or R2/S3 may be needed.
+- Image filenames use UUIDs (unguessable). Token-based auth deferred to Phase 7.
+- No `.mcp.json` or Playwright MCP — screenshots use the Playwright Node.js API directly via `POST /screenshot`

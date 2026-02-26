@@ -6,24 +6,37 @@ An SMS-based interface for agentic development workflows. Engineers text a phone
 
 **Core thesis:** SMS is the one universal interface on every phone. Diffs are images. Previews are screenshots. Approvals are text replies. The conversation thread is the project log.
 
-**PRD:** `PRD_SMS_AGENTIC_COCKPIT.md` — the full product specification. Read this first for product context.
+**PRD:** `docs/PRD_SMS_AGENTIC_COCKPIT.md` — the full product specification. Read this first for product context.
 
 ## Architecture
 
 ```
-Phone (SMS) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright MCP)
+Phone (SMS) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
 ```
 
 Three components:
-1. **Relay Server** — thin Node.js server (~200-300 LOC). Receives Twilio webhooks, authenticates by phone number, forwards commands to Claude Code on the user's VM, sends responses back as SMS/MMS.
-2. **Cloud VM** — always-on Docker container per user (Fly.io). Contains Claude Code CLI, Playwright MCP, Node.js, git, Chromium. Runs identically local and in production.
+1. **Relay Server** (`server.js`, 68 LOC) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS.
+2. **Cloud VM** (`vm/`, 157 LOC) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
 3. **Twilio** — SMS/MMS transport. Webhooks inbound, API outbound.
 
-**Phase plan:** `PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` — sequenced development phases.
+**Phase plan:** `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` — sequenced development phases.
+
+## Key Files
+
+| File | What It Does | When to Read |
+|------|-------------|--------------|
+| `server.js` | Relay server — Twilio webhooks, phone allowlist, SMS/MMS | Changing relay behavior |
+| `vm/vm-server.js` | VM API — Claude Code CLI wrapper, image serving | Changing VM behavior |
+| `vm/Dockerfile` | Container image — Node 22, Chromium, Claude Code | Changing container setup |
+| `docker-compose.yml` | VM orchestration — ports, memory, env | Changing local dev setup |
+| `.env.example` | Relay env vars template | Adding new config |
+| `vm/.env.example` | VM env vars template | Adding new VM config |
+| `ARCHITECTURE.md` | System design and data flow | Understanding the system |
+| `SECURITY.md` | Security posture and known limitations | Security-related changes |
 
 ## Context
 
-Solo developer, early-stage project. Prioritize simplicity — avoid over-engineering. Ship working software efficiently. Container-first development: if it works in Docker locally, it works in production.
+Early-stage open-source project. Prioritize simplicity — avoid over-engineering. Ship working software efficiently. Container-first development: if it works in Docker locally, it works in production.
 
 ### Developer Identity
 
@@ -35,9 +48,8 @@ The current developer's name is derived from `git config user.name`.
 
 ### Three-Tier Hierarchy
 
-1. **Docs** (`docs/`): Persistent documentation — plans, brainstorms, solutions. Kept accurate over time.
+1. **Docs** (`docs/`): Persistent documentation — plans, brainstorms, solutions, PRD, phase plan, competitive analysis. Kept accurate over time.
 2. **Notes** (`notes/`): Temporary work-in-progress material. Gitignored. Promote to docs when stable.
-3. **Root-level docs**: PRD, phase plan, competitive analysis — project-level reference material.
 
 ### Key Directories
 
@@ -173,7 +185,7 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 |---------|---------|
 | **Twilio** | SMS/MMS transport — webhooks inbound, API outbound |
 | **Claude Code CLI** | Headless agent execution on the VM |
-| **Playwright MCP** | Screenshot capture, page navigation, app interaction |
+| **Playwright** | Screenshot capture, page navigation, app interaction |
 | **GitHub** | Repos, PRs, OAuth for user onboarding |
 | **Fly.io** | Always-on cloud VMs (one per user) |
 

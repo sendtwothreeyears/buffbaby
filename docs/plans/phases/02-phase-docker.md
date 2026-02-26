@@ -20,7 +20,7 @@ Deliverables:
 
 ## Tasks
 
-- [ ] Build Dockerfile with Claude Code CLI + Playwright MCP + Node.js + git + Chromium, expose HTTP API that accepts a command and returns Claude Code headless output
+- [x] Build Dockerfile with Claude Code CLI + Playwright MCP + Node.js + git + Chromium, expose HTTP API that accepts a command and returns Claude Code headless output
   - Brainstorm: `/workflow:brainstorm Docker image design — Claude Code headless + Playwright MCP + HTTP API wrapper`
   - Plan: `/workflow:plan Docker image with Claude Code CLI headless mode and HTTP API wrapper`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-docker-vm-plan.md`
@@ -37,3 +37,53 @@ Deliverables:
 - API keys are passed as environment variables — never baked into the image. Also set `GITHUB_TOKEN` for PR creation (needed in Phase 6).
 - **Memory:** Chromium + Claude Code is memory-heavy. Allocate at least 2GB Docker memory for local dev. Fly.io VM sizing will matter in Phase 7.
 - Keep the API wrapper in a single file. It's not the product — it's plumbing.
+
+## Review
+
+**Status:** PASS
+**Reviewed:** 2026-02-25
+
+### Validation Results
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| `docker build` succeeds | PASS | All 11 layers build. Image: `textslash-vm:latest` |
+| `docker-compose up` starts container | PASS | Container starts, logs `[STARTUP] VM server listening on port 3001` |
+| `GET /health` returns `{"status":"ok"}` | PASS | `curl http://localhost:3001/health` → `{"status":"ok"}` |
+| `POST /command` with prompt → Claude Code responds | PASS | `{"text":"4\n","images":[],"exitCode":0,"durationMs":2870}` — prompt "What is 2+2?" returned correct answer. Root-user blocker fixed by adding non-root `appuser`. |
+| Missing `text` field returns 400 | PASS | Empty body and empty string both return 400 |
+| `/images/nonexistent.png` returns 404 | PASS | Returns `Not Found` with 404 |
+| Path traversal (`../../etc/passwd`) returns 400 | PASS | Returns `Bad Request` with 400 |
+| Missing `ANTHROPIC_API_KEY` → fail-fast exit | PASS | Container exits with code 1 and clear error message |
+| `SIGTERM` graceful shutdown | PASS | Container stops cleanly after `docker kill --signal SIGTERM` |
+| `.mcp.json` with Playwright MCP | N/A | Deliberately removed in 177f86f — replaced with Playwright CLI |
+
+### Blocker Found & Fixed
+
+**Claude Code refuses to run as root.** Initial Dockerfile ran as `root` (Docker default). Claude Code CLI rejects `--dangerously-skip-permissions` under root/sudo privileges. Fixed by adding a non-root `appuser` — also a Docker security best practice.
+
+### Code Quality
+
+- **157 LOC** single-file server — clean and focused
+- Proper `detached: true` + process group killing prevents orphan processes
+- 10MB stdout/stderr buffer caps prevent OOM
+- Startup validation of `ANTHROPIC_API_KEY` and `COMMAND_TIMEOUT_MS`
+- Path traversal protection on `/images/:filename`
+- Concurrency guard (boolean mutex, 409 response)
+- Logging follows relay conventions (`[COMMAND]`, `[SPAWN]`, `[DONE]`, etc.)
+- `spawn` (not `exec`) avoids shell injection
+- Prompt piped via stdin avoids `ARG_MAX` limits
+
+### Issues Found
+
+None remaining. Root-user blocker resolved during review.
+
+### Tech Debt
+
+- Plan document (`docs/plans/2026-02-25-feat-docker-vm-image-plan.md`) still references `.mcp.json` and old Dockerfile — stale after the Playwright CLI refactor
+- Phase 4 notes assume `.mcp.json` exists — will need updating when Phase 4 starts
+- Claude Code CLI version not pinned in Dockerfile (risk noted in plan but not yet addressed)
+
+### Next Steps
+
+Phase complete. Next: **Phase 3 — Command** (`03-phase-command.md`). Start with `/workflow:brainstorm` or `/workflow:plan` for connecting the relay to the Docker VM.

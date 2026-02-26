@@ -1,19 +1,25 @@
 require("dotenv").config();
 const express = require("express");
-const path = require("path");
 const twilio = require("twilio");
 
 const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
   TWILIO_PHONE_NUMBER,
-  NGROK_URL,
+  PUBLIC_URL,
   ALLOWED_PHONE_NUMBERS,
+  CLAUDE_HOST = "http://localhost:3001",
   PORT = "3000",
 } = process.env;
 
 // Validate required env vars
-const required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER", "NGROK_URL", "ALLOWED_PHONE_NUMBERS"];
+const required = [
+  "TWILIO_ACCOUNT_SID",
+  "TWILIO_AUTH_TOKEN",
+  "TWILIO_PHONE_NUMBER",
+  "PUBLIC_URL",
+  "ALLOWED_PHONE_NUMBERS",
+];
 for (const key of required) {
   if (!process.env[key]) {
     console.error(`Missing required env var: ${key}`);
@@ -27,38 +33,213 @@ const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 
-app.post("/sms", async (req, res) => {
-  const from = req.body.From;
-  const body = req.body.Body;
-  console.log(`[INBOUND] From: ${from}, Body: ${body}`);
+// --- Constants ---
+const MAX_QUEUE_DEPTH = 5;
+const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
+const MAX_MMS_MEDIA = 10; // Twilio limit: 10 media URLs per MMS
 
-  if (!allowlist.has(from)) {
-    console.log(`[BLOCKED] ${from} not in allowlist`);
-    return res.sendStatus(200);
+// --- Per-user state ---
+const userState = new Map(); // Map<phone, { busy: boolean, queue: string[] }>
+
+function getState(phone) {
+  if (!userState.has(phone)) {
+    userState.set(phone, { busy: false, queue: [] });
+  }
+  return userState.get(phone);
+}
+
+// --- Health endpoint ---
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", service: "textslash-relay" });
+});
+
+// --- Image proxy — Twilio fetches images from relay, relay proxies from VM ---
+app.get("/images/:filename", async (req, res) => {
+  const { filename } = req.params;
+
+  // Validate filename: UUID.jpeg only — prevents path traversal
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpeg$/.test(filename)) {
+    return res.sendStatus(400);
   }
 
   try {
-    await client.messages.create({
-      to: from,
-      from: TWILIO_PHONE_NUMBER,
-      body: body,
-      mediaUrl: [`${NGROK_URL}/test-image.png`],
-    });
-    console.log(`[OUTBOUND] Echo sent to ${from}`);
+    const vmUrl = `${CLAUDE_HOST}/images/${encodeURIComponent(filename)}`;
+    const response = await fetch(vmUrl);
+
+    if (!response.ok) {
+      return res.sendStatus(response.status);
+    }
+
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=300");
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
   } catch (err) {
-    console.error(`[ERROR] Failed to send to ${from}:`, err.message);
+    console.error(`[IMAGE_PROXY_ERR] ${filename}: ${err.message}`);
+    res.sendStatus(502);
+  }
+});
+
+// --- Twilio webhook signature validation ---
+const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
+  url: PUBLIC_URL + "/sms",
+});
+
+// --- Core SMS handler ---
+app.post("/sms", webhookValidator, async (req, res) => {
+  const from = req.body.From;
+  const body = (req.body.Body || "").trim();
+
+  // Phone allowlist
+  if (!allowlist.has(from)) {
+    console.log(`[BLOCKED] ${from}`);
+    return res.sendStatus(200);
   }
 
+  // Immediate 200 OK — async pattern (Twilio 15s timeout)
   res.sendStatus(200);
+
+  console.log(`[INBOUND] ${from}: ${body.substring(0, 80)}`);
+
+  // MMS check (text-only for Phase 3) — before empty-body check so
+  // image-only messages get the right error ("text only" not "empty")
+  if (parseInt(req.body.NumMedia || "0", 10) > 0) {
+    return sendMessage(from, "I can only process text messages for now.");
+  }
+
+  // Empty message check
+  if (!body) {
+    return sendMessage(from, "I received an empty message.");
+  }
+
+  // Queue or forward
+  const state = getState(from);
+  if (state.busy) {
+    if (state.queue.length >= MAX_QUEUE_DEPTH) {
+      console.log(`[QUEUE_FULL] ${from}`);
+      return sendMessage(from, "Queue full, please wait for current tasks to finish.");
+    }
+    state.queue.push(body);
+    console.log(`[QUEUED] ${from} (depth: ${state.queue.length})`);
+    return sendMessage(from, "Got it, I'll process this next.");
+  }
+
+  state.busy = true; // Synchronous — before any await
+  try {
+    await processCommand(from, body, state);
+  } catch (err) {
+    // Safety net — ensure busy flag is always cleared
+    state.busy = false;
+    state.queue.length = 0;
+    console.error(`[FATAL] ${from}: unhandled error in processCommand: ${err.message}`);
+  }
 });
 
-app.get("/test-image.png", (req, res) => {
-  res.sendFile(path.join(__dirname, "assets", "test-image.png"));
-});
+// --- Forward to VM and process queue ---
+async function processCommand(from, text, state) {
+  let current = text;
+  while (current) {
+    try {
+      console.log(`[FORWARD] ${from}: ${current.substring(0, 80)}`);
+      const data = await forwardToVM(current);
 
+      // Construct public media URLs from images array
+      const mediaUrls = (data.images || [])
+        .slice(0, MAX_MMS_MEDIA)
+        .map((img) => `${PUBLIC_URL}${img.url}`);
+
+      if (data.text) {
+        const response =
+          data.text.length > 1500
+            ? data.text.substring(0, 1500) + "\n\n[Response truncated]"
+            : data.text;
+        console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
+        await sendMessage(from, response, mediaUrls);
+      } else if (mediaUrls.length > 0) {
+        await sendMessage(from, "Here's a screenshot:", mediaUrls);
+      } else {
+        await sendMessage(from, "Claude returned an empty response.");
+      }
+    } catch (err) {
+      console.error(`[ERROR] ${from}: ${err.message}`);
+      const message =
+        err.status === 400
+          ? "I couldn't process that message. Try rephrasing."
+          : err.status === 408
+            ? "That took too long. Try a simpler request."
+            : "Something went wrong. Try again in a moment.";
+      await sendMessage(from, message);
+    }
+
+    // Dequeue next message or mark idle
+    if (state.queue.length > 0) {
+      current = state.queue.shift();
+      console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
+    } else {
+      current = null;
+    }
+  }
+  state.busy = false;
+}
+
+// --- HTTP to VM with timeout + cold-start retry ---
+async function forwardToVM(text) {
+  const doFetch = async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${CLAUDE_HOST}/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
+          status: res.status,
+        });
+      }
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  try {
+    return await doFetch();
+  } catch (err) {
+    // Cold-start retry on connection error
+    if (err.cause?.code === "ECONNREFUSED" || err.message.includes("ECONNREFUSED")) {
+      console.log("[RETRY] VM connection refused, retrying in 4s (cold start?)");
+      await new Promise((r) => setTimeout(r, 4000));
+      return await doFetch();
+    }
+    throw err;
+  }
+}
+
+// --- Outbound SMS/MMS helper ---
+async function sendMessage(to, body, mediaUrls = []) {
+  try {
+    const params = { to, from: TWILIO_PHONE_NUMBER, body };
+    if (mediaUrls.length > 0) {
+      params.mediaUrl = mediaUrls;
+    }
+    await client.messages.create(params);
+    if (mediaUrls.length > 0) {
+      console.log(`[MMS] ${to}: ${mediaUrls.length} image(s)`);
+    }
+    console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
+  } catch (err) {
+    console.error(`[OUTBOUND_ERROR] ${to}: ${err.message}`);
+  }
+}
+
+// --- Start server ---
 app.listen(PORT, () => {
-  console.log(`Echo server listening on port ${PORT}`);
-  console.log(`Webhook URL: ${NGROK_URL}/sms`);
-  console.log(`Test image:  ${NGROK_URL}/test-image.png`);
-  console.log(`Allowlist:   ${[...allowlist].join(", ")}`);
+  console.log(`[STARTUP] Relay listening on port ${PORT}`);
+  console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
+  console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/sms`);
+  console.log(`[STARTUP] Allowlist: ${[...allowlist].join(", ")}`);
 });
