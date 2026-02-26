@@ -6,6 +6,7 @@ const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
   TWILIO_PHONE_NUMBER,
+  TWILIO_WHATSAPP_NUMBER,
   PUBLIC_URL,
   ALLOWED_PHONE_NUMBERS,
   CLAUDE_HOST = "http://localhost:3001",
@@ -85,14 +86,21 @@ const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
   url: PUBLIC_URL + "/sms",
 });
 
-// --- Core SMS handler ---
+// --- Core SMS/WhatsApp handler ---
 app.post("/sms", webhookValidator, async (req, res) => {
   const from = req.body.From;
+  const phone = from.replace(/^whatsapp:/, "");
   const body = (req.body.Body || "").trim();
 
-  // Phone allowlist
-  if (!allowlist.has(from)) {
-    console.log(`[BLOCKED] ${from}`);
+  // Reject WhatsApp if not configured
+  if (from.startsWith("whatsapp:") && !TWILIO_WHATSAPP_NUMBER) {
+    console.log(`[BLOCKED] WhatsApp not configured: ${phone}`);
+    return res.sendStatus(200);
+  }
+
+  // Phone allowlist (strip whatsapp: prefix for check)
+  if (!allowlist.has(phone)) {
+    console.log(`[BLOCKED] ${phone}`);
     return res.sendStatus(200);
   }
 
@@ -219,10 +227,14 @@ async function forwardToVM(text) {
   }
 }
 
-// --- Outbound SMS/MMS helper ---
+// --- Outbound SMS/MMS/WhatsApp helper ---
 async function sendMessage(to, body, mediaUrls = []) {
   try {
-    const params = { to, from: TWILIO_PHONE_NUMBER, body };
+    const isWhatsApp = to.startsWith("whatsapp:");
+    const fromAddr = isWhatsApp
+      ? `whatsapp:${TWILIO_WHATSAPP_NUMBER}`
+      : TWILIO_PHONE_NUMBER;
+    const params = { to, from: fromAddr, body };
     if (mediaUrls.length > 0) {
       params.mediaUrl = mediaUrls;
     }
@@ -242,4 +254,5 @@ app.listen(PORT, () => {
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
   console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/sms`);
   console.log(`[STARTUP] Allowlist: ${[...allowlist].join(", ")}`);
+  console.log(`[STARTUP] WhatsApp: ${TWILIO_WHATSAPP_NUMBER ? `enabled (${TWILIO_WHATSAPP_NUMBER})` : "disabled"}`);
 });
