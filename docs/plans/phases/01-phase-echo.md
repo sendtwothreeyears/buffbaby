@@ -37,3 +37,42 @@ These are manual setup steps done in the Twilio console and terminal, not shippa
 - The test MMS image can be any publicly accessible PNG URL passed as `MediaUrl` in the Twilio API response, or served by the echo server itself on a public-facing route via ngrok.
 - The echo server is throwaway code — Phase 3 replaces it with the real relay. But it validates the entire Twilio → ngrok → localhost → Twilio round trip.
 - Keep the relay server in a single file for now. No framework — just `express` with Twilio's webhook parsing.
+
+## Review
+
+**Status:** PASS
+**Reviewed:** 2026-02-25
+
+### Validation Results
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| Echo SMS back to sender | PASS | User confirmed: texting the Twilio number returns the exact message |
+| Test image received via MMS | PASS | User confirmed: MMS image delivered alongside echo |
+| Non-allowlisted numbers silently dropped | PASS | User confirmed: no response from non-allowlisted number |
+| `npm install && npm start` launches on port 3000 | PASS | Verified — server starts and binds to port 3000 |
+| Server logs inbound/outbound SMS | PASS | Code logs `[INBOUND]`, `[OUTBOUND]`, and `[BLOCKED]` events |
+| Phone number allowlist in `.env` | PASS | `ALLOWED_PHONE_NUMBERS` parsed as comma-separated E.164 Set |
+| `.env.example` documents all config | PASS | All 6 env vars documented with placeholder format |
+| Test image < 100KB | PASS | `assets/test-image.png` is 603 bytes |
+
+### Code Quality
+
+- **64 LOC** (vs ~50 target) — justified by env var validation block
+- Single-file Express server, no unnecessary abstractions
+- Clean error handling with try/catch on Twilio API call
+- No YAGNI violations (confirmed by ship review simplicity pass)
+- Code matches the plan document exactly
+
+### Issues Found
+
+None. No P1 or P2 issues identified during ship review or phase review.
+
+### Tech Debt
+
+- **No webhook signature validation** — deferred to Phase 3 (by design). Anyone who discovers the ngrok URL can forge requests.
+- **ngrok URL requires manual update** on restart — acceptable for local dev, becomes irrelevant in Phase 7 (Deploy).
+
+### Next Steps
+
+Phase complete. Next: **Phase 2 — Docker** (`02-phase-docker.md`). Start with `/workflow:brainstorm` or `/workflow:plan` for containerizing the relay server.
