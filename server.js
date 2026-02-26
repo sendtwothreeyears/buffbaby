@@ -69,14 +69,15 @@ app.post("/sms", webhookValidator, async (req, res) => {
 
   console.log(`[INBOUND] ${from}: ${body.substring(0, 80)}`);
 
+  // MMS check (text-only for Phase 3) — before empty-body check so
+  // image-only messages get the right error ("text only" not "empty")
+  if (parseInt(req.body.NumMedia || "0", 10) > 0) {
+    return sendSMS(from, "I can only process text messages for now.");
+  }
+
   // Empty message check
   if (!body) {
     return sendSMS(from, "I received an empty message.");
-  }
-
-  // MMS check (text-only for Phase 3)
-  if (parseInt(req.body.NumMedia || "0", 10) > 0) {
-    return sendSMS(from, "I can only process text messages for now.");
   }
 
   // Queue or forward
@@ -92,7 +93,14 @@ app.post("/sms", webhookValidator, async (req, res) => {
   }
 
   state.busy = true; // Synchronous — before any await
-  await processCommand(from, body, state);
+  try {
+    await processCommand(from, body, state);
+  } catch (err) {
+    // Safety net — ensure busy flag is always cleared
+    state.busy = false;
+    state.queue.length = 0;
+    console.error(`[FATAL] ${from}: unhandled error in processCommand: ${err.message}`);
+  }
 });
 
 // --- Forward to VM and process queue ---
