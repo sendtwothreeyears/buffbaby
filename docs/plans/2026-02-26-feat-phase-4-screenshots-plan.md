@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 4 Screenshots — VM capture to MMS delivery"
 type: feat
-status: active
+status: completed
 date: 2026-02-26
 phase: 4
 depends_on: Phase 3 (Command) — PASS
