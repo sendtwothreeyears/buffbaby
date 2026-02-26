@@ -39,9 +39,7 @@ app.post("/command", (req, res) => {
   const stdoutChunks = [];
   const stderrChunks = [];
 
-  const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
-    env: { ...process.env },
-  });
+  const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"]);
   activeChild = child;
   let timedOut = false;
 
