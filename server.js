@@ -33,6 +33,10 @@ const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 
+// --- Constants ---
+const MAX_QUEUE_DEPTH = 5;
+const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
+
 // --- Per-user state ---
 const userState = new Map(); // Map<phone, { busy: boolean, queue: string[] }>
 
@@ -83,7 +87,7 @@ app.post("/sms", webhookValidator, async (req, res) => {
   // Queue or forward
   const state = getState(from);
   if (state.busy) {
-    if (state.queue.length >= 5) {
+    if (state.queue.length >= MAX_QUEUE_DEPTH) {
       console.log(`[QUEUE_FULL] ${from}`);
       return sendSMS(from, "Queue full, please wait for current tasks to finish.");
     }
@@ -105,45 +109,46 @@ app.post("/sms", webhookValidator, async (req, res) => {
 
 // --- Forward to VM and process queue ---
 async function processCommand(from, text, state) {
-  try {
-    console.log(`[FORWARD] ${from}: ${text.substring(0, 80)}`);
-    const data = await forwardToVM(text);
+  let current = text;
+  while (current) {
+    try {
+      console.log(`[FORWARD] ${from}: ${current.substring(0, 80)}`);
+      const data = await forwardToVM(current);
 
-    if (data.text) {
-      const response =
-        data.text.length > 1500
-          ? data.text.substring(0, 1500) + "\n\n[Response truncated]"
-          : data.text;
-      console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode})`);
-      await sendSMS(from, response);
-    } else {
-      await sendSMS(from, "Claude returned an empty response.");
+      if (data.text) {
+        const response =
+          data.text.length > 1500
+            ? data.text.substring(0, 1500) + "\n\n[Response truncated]"
+            : data.text;
+        console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode})`);
+        await sendSMS(from, response);
+      } else {
+        await sendSMS(from, "Claude returned an empty response.");
+      }
+    } catch (err) {
+      console.error(`[ERROR] ${from}: ${err.message}`);
+      const message =
+        err.status === 400
+          ? "I couldn't process that message. Try rephrasing."
+          : err.status === 408
+            ? "That took too long. Try a simpler request."
+            : "Something went wrong. Try again in a moment.";
+      await sendSMS(from, message);
     }
-  } catch (err) {
-    console.error(`[ERROR] ${from}: ${err.message}`);
-    const message =
-      err.status === 400
-        ? "I couldn't process that message. Try rephrasing."
-        : err.status === 408
-          ? "That took too long. Try a simpler request."
-          : "Something went wrong. Try again in a moment.";
-    await sendSMS(from, message);
-  }
 
-  // Process next queued message
-  if (state.queue.length > 0) {
-    const next = state.queue.shift();
-    console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
-    await processCommand(from, next, state);
-  } else {
-    state.busy = false;
+    // Dequeue next message or mark idle
+    if (state.queue.length > 0) {
+      current = state.queue.shift();
+      console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
+    } else {
+      current = null;
+    }
   }
+  state.busy = false;
 }
 
 // --- HTTP to VM with timeout + cold-start retry ---
 async function forwardToVM(text) {
-  const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
-
   const doFetch = async () => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
