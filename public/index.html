@@ -261,6 +261,8 @@
 
     addMessage("user", text);
     inputEl.value = "";
+    userScrolledUp = false;
+    scrollToBottom();
     setBusy(true);
 
     var removeLoading = showLoading();
