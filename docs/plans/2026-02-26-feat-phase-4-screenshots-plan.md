@@ -457,10 +457,10 @@ Or add to Dockerfile CMD as a background process. The test app only needs to run
 
 **Files:** `vm/CLAUDE.md` (new), `vm/test-app/index.html` (new), `vm/vm-server.js`
 
-- [ ] Create `vm/CLAUDE.md` with `/screenshot` endpoint documentation
-- [ ] Create `vm/test-app/index.html` static test page
-- [ ] Add test app server startup to VM
-- [ ] Implement TTL-based image cleanup (30-min TTL, 5-min interval, 100-file cap)
+- [x] Create `vm/CLAUDE.md` with `/screenshot` endpoint documentation
+- [x] Create `vm/test-app/index.html` static test page
+- [x] Add test app server startup to VM
+- [x] Implement TTL-based image cleanup (30-min TTL, 5-min interval, 100-file cap)
 - [ ] End-to-end test: text "show me the app" → receive MMS screenshot
 
 **Validates:** Claude Code correctly interprets "show me the app", calls `/screenshot`, user receives screenshot on phone.

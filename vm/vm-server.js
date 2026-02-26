@@ -271,6 +271,14 @@ process.on("SIGTERM", () => {
 app.listen(Number(PORT), () => {
   console.log(`[STARTUP] VM server listening on port ${PORT}`);
   console.log(`[STARTUP] Idle timeout: ${IDLE_TIMEOUT / 1000}s`);
+
+  // Start test app server on port 8080 (static HTML for screenshot testing)
+  const testAppPath = path.join(__dirname, "test-app");
+  const { exec } = require("child_process");
+  exec(`npx -y serve ${testAppPath} -l 8080 -s`, (err) => {
+    if (err) console.error(`[TEST_APP] Failed to start: ${err.message}`);
+  });
+  console.log("[TEST_APP] Starting on http://localhost:8080");
 });
 
 // Idle shutdown — exit if no activity for IDLE_TIMEOUT_MS (Docker restart: unless-stopped)

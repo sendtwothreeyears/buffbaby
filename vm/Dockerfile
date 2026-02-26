@@ -38,7 +38,8 @@ COPY package.json ./
 RUN npm install --production
 
 # Copy application files
-COPY vm-server.js ./
+COPY vm-server.js CLAUDE.md ./
+COPY test-app/ ./test-app/
 
 # Create images directory for Phase 4+ and set ownership
 RUN mkdir -p /tmp/images && chown appuser:appuser /tmp/images
