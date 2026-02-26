@@ -19,12 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Tell Playwright to use system Chromium (skip downloading its own)
+# Skip automatic browser download during npm install (we install explicitly below)
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Install Claude Code CLI and Playwright CLI globally
 RUN npm install -g @anthropic-ai/claude-code playwright
+
+# Install only Chromium for Playwright (not Firefox/WebKit)
+RUN npx playwright install chromium
 
 WORKDIR /app
 

@@ -11,6 +11,12 @@ if (!ANTHROPIC_API_KEY) {
 }
 
 const TIMEOUT = Number(COMMAND_TIMEOUT_MS);
+if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) {
+  console.error(`Invalid COMMAND_TIMEOUT_MS: "${COMMAND_TIMEOUT_MS}" (must be a positive number)`);
+  process.exit(1);
+}
+
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB cap on stdout/stderr
 const IMAGES_DIR = "/tmp/images";
 const app = express();
 let busy = false;
@@ -39,23 +45,39 @@ app.post("/command", (req, res) => {
   const stdoutChunks = [];
   const stderrChunks = [];
 
-  const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"]);
+  const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
+    detached: true,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   activeChild = child;
   let timedOut = false;
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
 
   console.log(`[COMMAND] Received prompt (${text.length} chars)`);
   console.log(`[SPAWN]   Claude Code PID ${child.pid}`);
 
+  const killChild = () => {
+    try { process.kill(-child.pid, "SIGTERM"); } catch (_) { /* already dead */ }
+  };
+
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill();
+    killChild();
   }, TIMEOUT);
 
+  child.stdin.on("error", () => {}); // swallow broken-pipe if child dies early
   child.stdin.write(text);
   child.stdin.end();
 
-  child.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
-  child.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+  child.stdout.on("data", (chunk) => {
+    stdoutBytes += chunk.length;
+    if (stdoutBytes <= MAX_OUTPUT_BYTES) stdoutChunks.push(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    stderrBytes += chunk.length;
+    if (stderrBytes <= MAX_OUTPUT_BYTES) stderrChunks.push(chunk);
+  });
 
   child.on("error", (err) => {
     clearTimeout(timer);
@@ -121,10 +143,12 @@ app.get("/images/:filename", (req, res) => {
   });
 });
 
-// Graceful shutdown
+// Graceful shutdown — kill process group, not just the child
 process.on("SIGTERM", () => {
   console.log("[SHUTDOWN] SIGTERM received");
-  if (activeChild) activeChild.kill();
+  if (activeChild) {
+    try { process.kill(-activeChild.pid, "SIGTERM"); } catch (_) { /* already dead */ }
+  }
   process.exit(0);
 });
 
