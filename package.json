@@ -1,8 +1,21 @@
 {
   "name": "textslash-relay",
   "version": "0.1.0",
-  "private": true,
-  "description": "SMS relay server for the SMS Agentic Development Cockpit",
+  "description": "SMS relay server for textslash — control Claude Code via SMS",
+  "author": "sendtwothreeyears",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sendtwothreeyears/ts.git"
+  },
+  "homepage": "https://github.com/sendtwothreeyears/ts",
+  "bugs": {
+    "url": "https://github.com/sendtwothreeyears/ts/issues"
+  },
+  "keywords": ["sms", "claude", "ai", "development", "twilio", "mms"],
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

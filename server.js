@@ -7,13 +7,13 @@ const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
   TWILIO_PHONE_NUMBER,
-  NGROK_URL,
+  PUBLIC_URL,
   ALLOWED_PHONE_NUMBERS,
   PORT = "3000",
 } = process.env;
 
 // Validate required env vars
-const required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER", "NGROK_URL", "ALLOWED_PHONE_NUMBERS"];
+const required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER", "PUBLIC_URL", "ALLOWED_PHONE_NUMBERS"];
 for (const key of required) {
   if (!process.env[key]) {
     console.error(`Missing required env var: ${key}`);
@@ -26,6 +26,10 @@ const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "textslash-relay" });
+});
 
 app.post("/sms", async (req, res) => {
   const from = req.body.From;
@@ -42,7 +46,7 @@ app.post("/sms", async (req, res) => {
       to: from,
       from: TWILIO_PHONE_NUMBER,
       body: body,
-      mediaUrl: [`${NGROK_URL}/test-image.png`],
+      mediaUrl: [`${PUBLIC_URL}/test-image.png`],
     });
     console.log(`[OUTBOUND] Echo sent to ${from}`);
   } catch (err) {
@@ -58,7 +62,7 @@ app.get("/test-image.png", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Echo server listening on port ${PORT}`);
-  console.log(`Webhook URL: ${NGROK_URL}/sms`);
-  console.log(`Test image:  ${NGROK_URL}/test-image.png`);
+  console.log(`Webhook URL: ${PUBLIC_URL}/sms`);
+  console.log(`Test image:  ${PUBLIC_URL}/test-image.png`);
   console.log(`Allowlist:   ${[...allowlist].join(", ")}`);
 });
