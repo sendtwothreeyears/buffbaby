@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-textslash follows a "skills-over-features" model. The core stays minimal (~220 LOC across two servers). New capabilities go through the [Claude Code skills system](https://docs.anthropic.com/en/docs/claude-code/tutorials#create-custom-slash-commands) rather than core code changes.
+textslash follows a "skills-over-features" model. The core stays minimal (~225 LOC across two servers). New capabilities go through the [Claude Code skills system](https://docs.anthropic.com/en/docs/claude-code/tutorials#create-custom-slash-commands) rather than core code changes.
 
 **We accept:** Bug fixes, security improvements, documentation improvements, performance optimizations, simplification of existing code.
 

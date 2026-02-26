@@ -15,7 +15,7 @@ Phone (SMS) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
 ```
 
 Three components:
-1. **Relay Server** (`server.js`, 64 LOC) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS.
+1. **Relay Server** (`server.js`, 68 LOC) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS.
 2. **Cloud VM** (`vm/`, 157 LOC) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
 3. **Twilio** — SMS/MMS transport. Webhooks inbound, API outbound.
 
@@ -185,7 +185,7 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 |---------|---------|
 | **Twilio** | SMS/MMS transport — webhooks inbound, API outbound |
 | **Claude Code CLI** | Headless agent execution on the VM |
-| **Playwright MCP** | Screenshot capture, page navigation, app interaction |
+| **Playwright** | Screenshot capture, page navigation, app interaction |
 | **GitHub** | Repos, PRs, OAuth for user onboarding |
 | **Fly.io** | Always-on cloud VMs (one per user) |
 

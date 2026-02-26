@@ -21,7 +21,7 @@ Three layers:
 
 | Layer | What | Code |
 |-------|------|------|
-| **Relay Server** | Express server — receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS | `server.js` (64 LOC) |
+| **Relay Server** | Express server — receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS | `server.js` (68 LOC) |
 | **Docker VM** | Always-on container — Claude Code CLI, Chromium, Playwright, HTTP API wrapper | `vm/` (157 LOC) |
 | **Twilio** | SMS/MMS transport — webhooks inbound, API outbound | Config only |
 

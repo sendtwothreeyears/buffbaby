@@ -873,7 +873,7 @@ _Note: This is significantly cheaper than the iMessage approach, which required 
 ## Appendix
 
 ### Competitive Landscape
-- [Authentic's Agentic Engineering Techniques](./README.md) — Example Claude Code skill library (this repo's own skills are used for development/testing)
+- textslash's own Claude Code skills (in `.claude/skills/`) are used for development and testing
 - [Claude Code Remote Control docs](https://code.claude.com/docs/en/remote-control) — Anthropic's basic remote access feature (Feb 2026)
 - [Kibbler](https://kibbler.dev/) — Third-party Claude Code mobile wrapper with voice + diffs (requires iOS app install)
 - [Moshi](https://getmoshi.app/) — iOS terminal with push notifications for Claude Code (requires iOS app install)

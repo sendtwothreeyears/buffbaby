@@ -6,7 +6,7 @@
 Phone (SMS) ←→ Twilio ←→ Relay Server ←→ Docker VM (Claude Code)
 ```
 
-### Layer 1: Relay Server (`server.js` — 64 LOC)
+### Layer 1: Relay Server (`server.js` — 68 LOC)
 
 Express server that bridges Twilio SMS/MMS with the backend VM.
 
@@ -40,7 +40,7 @@ Always-on container running Claude Code headlessly via HTTP API.
 
 | File | Purpose | LOC |
 |------|---------|-----|
-| `server.js` | Relay server — receives SMS, authenticates, sends responses | 64 |
+| `server.js` | Relay server — receives SMS, authenticates, sends responses | 68 |
 | `vm/vm-server.js` | VM HTTP API — wraps Claude Code CLI | 157 |
 | `vm/Dockerfile` | Docker image — Node 22, Chromium, Claude Code, Playwright | 51 |
 | `docker-compose.yml` | VM orchestration — ports, memory limits, env | 12 |
