@@ -2,7 +2,7 @@ const express = require("express");
 const { spawn } = require("child_process");
 const path = require("path");
 
-const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000" } = process.env;
+const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000" } = process.env;
 
 // Fail-fast env var validation
 if (!ANTHROPIC_API_KEY) {
@@ -16,11 +16,13 @@ if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) {
   process.exit(1);
 }
 
+const IDLE_TIMEOUT = Number(IDLE_TIMEOUT_MS);
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB cap on stdout/stderr
 const IMAGES_DIR = "/tmp/images";
 const app = express();
 let busy = false;
 let activeChild = null;
+let lastActivity = Date.now();
 
 app.use(express.json());
 
@@ -41,11 +43,12 @@ app.post("/command", (req, res) => {
   }
 
   busy = true;
+  lastActivity = Date.now();
   const start = Date.now();
   const stdoutChunks = [];
   const stderrChunks = [];
 
-  const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
+  const child = spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"], {
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -97,6 +100,7 @@ app.post("/command", (req, res) => {
     clearTimeout(timer);
     busy = false;
     activeChild = null;
+    lastActivity = Date.now();
     const durationMs = Date.now() - start;
     const textOut = Buffer.concat(stdoutChunks).toString();
     const stderrOut = Buffer.concat(stderrChunks).toString();
@@ -154,4 +158,13 @@ process.on("SIGTERM", () => {
 
 app.listen(Number(PORT), () => {
   console.log(`[STARTUP] VM server listening on port ${PORT}`);
+  console.log(`[STARTUP] Idle timeout: ${IDLE_TIMEOUT / 1000}s`);
 });
+
+// Idle shutdown — exit if no activity for IDLE_TIMEOUT_MS (Docker restart: unless-stopped)
+setInterval(() => {
+  if (!busy && Date.now() - lastActivity > IDLE_TIMEOUT) {
+    console.log(`[IDLE] No activity for ${IDLE_TIMEOUT / 1000}s, shutting down`);
+    process.exit(0);
+  }
+}, 60_000);
