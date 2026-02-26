@@ -11,14 +11,14 @@
 
 1. **Messaging layer** — Twilio SMS/MMS (inbound/outbound)
 2. **Relay layer** — thin Node.js server (webhook handler + router, ~200-300 LOC)
-3. **Compute layer** — Docker container with Claude Code CLI + Playwright MCP
+3. **Compute layer** — Docker container with Claude Code CLI + Playwright
 4. **Image layer** — screenshot/diff rendering + HTTP serving from VM
 5. **Onboarding layer** — signup website, database, provisioning, payments
 
 ## Dependency Chain
 
 ```
-Twilio → Relay → Docker/Claude Code → Playwright MCP → Image serving
+Twilio → Relay → Docker/Claude Code → Playwright → Image serving
                                                          ↓
                                               MMS delivery back through Twilio
 ```

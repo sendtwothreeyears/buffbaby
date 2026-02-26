@@ -105,7 +105,7 @@ OpenClaw is the closest architectural comparison. Both use the pattern: "receive
 OpenClaw was evaluated as a potential foundation. The conclusion: it adds a middleman without adding capability.
 
 - **SMS is not a first-class channel in OpenClaw** — would require building a custom extension or using Clawphone (voice-first, SMS secondary)
-- **Claude Code already does everything** — slash commands, multi-agent orchestration, Playwright MCP, git operations. OpenClaw would sit between SMS and Claude Code without adding value.
+- **Claude Code already does everything** — slash commands, multi-agent orchestration, Playwright, git operations. OpenClaw would sit between SMS and Claude Code without adding value.
 - **The relay is trivially simple** — ~200-300 lines of code. Adding a full orchestration platform as a dependency for 200 lines of glue code doesn't make sense.
 - **OpenClaw requires the user to host infrastructure.** Our product's value proposition is that the user hosts nothing.
 

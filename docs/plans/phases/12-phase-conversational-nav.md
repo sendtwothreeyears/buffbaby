@@ -6,9 +6,9 @@
 
 ## What You Build
 
-Validate and optimize conversational page navigation via Playwright MCP through the SMS bridge. The engineer texts natural language navigation commands ("show me the settings page", "click the login button"). Claude Code drives Playwright MCP to navigate, interact, and capture screenshots. The relay sends the updated screenshots back via MMS.
+Validate and optimize conversational page navigation via Playwright through the SMS bridge. The engineer texts natural language navigation commands ("show me the settings page", "click the login button"). Claude Code drives Playwright to navigate, interact, and capture screenshots. The relay sends the updated screenshots back via MMS.
 
-This is primarily a user-side capability — Claude Code + Playwright MCP already support this. The phase validates it works smoothly through the SMS bridge, profiles latency, and makes any relay-side adjustments needed.
+This is primarily a user-side capability — Claude Code + Playwright already support this. The phase validates it works smoothly through the SMS bridge, profiles latency, and makes any relay-side adjustments needed.
 
 Deliverables:
 - Validated conversational navigation flow through SMS (single-step and multi-step chains)
@@ -25,7 +25,7 @@ Deliverables:
 
 ## Notes
 
-- This capability is mostly provided by Claude Code + Playwright MCP. The platform work is ensuring the SMS bridge handles it smoothly.
+- This capability is mostly provided by Claude Code + Playwright. The platform work is ensuring the SMS bridge handles it smoothly.
 - Key concern: latency. Navigation + screenshot + MMS delivery should be < 10 seconds total. Profile and optimize if needed. If the Playwright browser needs warming up, keep it running.
 - The relay should preserve conversation context so Claude Code knows "click the submit button" refers to the page it just showed.
 - Default to mobile viewport (390px) for navigation screenshots since the user is on their phone. "show desktop" switches to 1440px.

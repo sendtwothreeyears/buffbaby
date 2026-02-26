@@ -105,7 +105,7 @@ This is not just a transport choice — it's the core product thesis. SMS is the
 
 _Platform infrastructure — what the service provides:_
 - [ ] Twilio SMS/MMS integration: service owns a Twilio phone number. Engineer texts this number. Twilio webhooks route to the relay server. Responses sent back via Twilio API.
-- [ ] Docker base image: a single Docker image containing Claude Code CLI, Playwright MCP, Node.js, git, and Chromium. This is the runtime environment for every user's VM. Runs identically on a developer's Mac (local) and on Fly.io (production).
+- [ ] Docker base image: a single Docker image containing Claude Code CLI, Playwright, Node.js, git, and Chromium. This is the runtime environment for every user's VM. Runs identically on a developer's Mac (local) and on Fly.io (production).
 - [ ] Thin relay server: lightweight Node.js server that receives Twilio webhooks, authenticates the user by phone number, looks up their VM, forwards the SMS text to Claude Code on that VM, and sends responses back via Twilio SMS/MMS. This is the platform's only custom code — Claude Code does all the real work.
 - [ ] Phone → VM routing: relay maps each registered phone number to the user's Fly.io VM. Incoming SMS is forwarded to the correct VM. The relay is agnostic to what the user sends — it forwards everything as-is.
 - [ ] Always-on cloud VM per user: Fly.io Machines running the Docker base image, one per user, always on — no cold starts, no hibernation. Engineer texts, gets an immediate response.
@@ -119,7 +119,7 @@ _SMS ↔ Claude Code bridge — the core transport:_
 - [ ] Agent output as SMS: Claude Code responses sent back as SMS replies.
 - [ ] Image output as MMS: when Claude Code generates images (screenshots, diffs, etc.), the relay fetches them from the VM and sends via Twilio MMS.
 - [ ] Images served from VM: screenshots and diff images are generated and served from the user's VM. The relay fetches them via HTTP and sends via Twilio MMS.
-- [ ] Playwright MCP pre-installed: every VM comes with the Playwright MCP server configured in `.mcp.json`. Claude Code uses it natively for screenshots, navigation, and page interaction — available to any user workflow that needs it.
+- [ ] Playwright pre-installed: every VM comes with Playwright and Chromium. Claude Code uses it for screenshots, navigation, and page interaction via the VM server's `/screenshot` endpoint — available to any user workflow that needs it.
 - [ ] Dictation support: engineer uses their phone's native keyboard dictation (iOS/Android built-in) to speak commands. By the time the SMS reaches the service, it's already text. No voice infrastructure needed on our end.
 
 _User-side capabilities — what the user's Claude Code setup provides (not platform features):_
@@ -128,14 +128,14 @@ The platform is agnostic to what the user does on their VM. Whatever Claude Code
 - Custom skills (`.claude/skills/`) — their workflows, review processes, automation
 - GitHub repos and branches
 - API keys (Claude, Codex, Gemini)
-- Project-specific configuration (CLAUDE.md, .mcp.json, etc.)
+- Project-specific configuration (CLAUDE.md, etc.)
 
 The following capabilities work through the platform but are provided by Claude Code, not by the platform itself:
 - Skill invocation (e.g., if the user has a `/ship` skill, they text "/ship add dark mode")
 - Multi-agent orchestration (user's skills may spawn parallel agents)
 - Code review workflows (user's review skills)
 - Diff rendering (Claude Code + the VM's image pipeline)
-- App screenshots via Playwright MCP
+- App screenshots via Playwright
 - Git operations, PR creation, deployment triggers
 - Text-based approvals ("approve", "reject")
 - Session management ("start session repo branch", "stop session")
@@ -273,7 +273,7 @@ _Note: The flows below illustrate the SMS experience using example Claude Code s
 - **MMS cost management:** Each MMS costs ~$0.02 via Twilio. A heavy workflow (8 diff images + 2 screenshots) costs ~$0.20 in MMS fees. Composite images (batching multiple diffs into one image) reduce cost when > 5 files change. Long-term, the `ImageStore` abstraction allows switching to hosted links (SMS + URL) to eliminate MMS costs entirely.
 - **Security:** All communication between the relay server and VMs must be encrypted (TLS/WSS). API keys for Claude, Codex, Gemini must never leave the VM. GitHub tokens use OAuth with minimal scopes. SMS authentication: only registered phone numbers can issue commands (allowlist matched against Twilio's `From` field). Twilio webhook signature validation on all incoming requests.
 - **Scalability:** Each user gets their own always-on VM. The relay server is stateless and horizontally scalable. VMs are isolated per user — no cross-contamination. Twilio handles SMS/MMS delivery at any scale.
-- **Integrations:** Twilio (SMS/MMS), Claude Code CLI (headless mode), Playwright MCP (screenshot capture + page interaction), GitHub (repos, PRs, Actions), Codex CLI (optional), Gemini CLI (optional), Vercel / Railway / Fly.io (deployment).
+- **Integrations:** Twilio (SMS/MMS), Claude Code CLI (headless mode), Playwright (screenshot capture + page interaction), GitHub (repos, PRs, Actions), Codex CLI (optional), Gemini CLI (optional), Vercel / Railway / Fly.io (deployment).
 - **Reliability:** The VM is always running — no cold starts. The relay server must be stateless and recoverable. Twilio queues undelivered messages automatically. Agent workflows must be resilient to relay server restarts — use a persistent job queue.
 - **SMS-specific constraints:** SMS has no formatting — no markdown, no syntax highlighting in text. All visual content (diffs, app previews, review summaries) must be rendered as images and sent via MMS. SMS segments are 160 characters (GSM-7) or 70 characters (UCS-2/emoji). Long messages span multiple segments — Twilio handles concatenation but charges per segment.
 
@@ -385,12 +385,12 @@ _Radically simple. The engineer owns nothing but a phone._
 │  └─────────┬──────────────────────────────────────┘  │
 │            │                                          │
 │  ┌─────────▼──────────────────────────────────────┐  │
-│  │ Playwright MCP (pre-configured in .mcp.json)    │  │
+│  │ Playwright + Chromium                            │  │
 │  │ - Headless Chromium browser                     │  │
 │  │ - Screenshot capture (mobile + desktop)         │  │
 │  │ - Page navigation on command                    │  │
 │  │ - Click/interact on command                     │  │
-│  │ - Claude Code calls it natively as MCP tools    │  │
+│  │ - Claude Code calls POST /screenshot on VM      │  │
 │  └────────────────────────────────────────────────┘  │
 │                                                       │
 │  ┌────────────────┐  ┌────────────────────────────┐  │
@@ -428,7 +428,7 @@ WHAT THE USER PROVIDES:          WHAT THE SERVICE PROVIDES:
 - Cell signal or WiFi           - Relay server (~200 lines)
 - GitHub account                - Always-on cloud VM per user
 - API keys (BYOK)              - Docker base image (Claude Code
-- Their Claude Code setup         + Playwright MCP + Chromium)
+- Their Claude Code setup         + Playwright + Chromium)
   (skills, workflows, config)   - Onboarding website + database
 - Monthly subscription          - VM provisioning pipeline
                                 - Image pipeline (VM → MMS)
@@ -459,7 +459,7 @@ PLATFORM (what we build):              USER (what they bring):
 - Docker base image                    - GitHub repos and branches
 - Image pipeline (VM → MMS)           - API keys (BYOK)
 - Onboarding website + database       - Their workflows and processes
-- Phone → VM routing                  - Project-specific .mcp.json
+- Phone → VM routing                  - Project-specific config
 ```
 
 The relay is deliberately dumb. It doesn't parse skill names, interpret commands, or understand workflow state. It forwards text and delivers images. All intelligence lives in Claude Code on the user's VM.
@@ -470,7 +470,7 @@ Everything runs inside a Docker container from day one — even during local dev
 
 **The Docker image contains:**
 - Claude Code CLI (headless mode)
-- Playwright MCP (pre-configured in `.mcp.json`)
+- Playwright + Chromium
 - Node.js, git, Chromium
 - Thin API wrapper (HTTP endpoint that accepts commands/skill invocations, returns output + image paths)
 - Image directory (`/tmp/images/`) served via HTTP
@@ -524,7 +524,7 @@ For developing and testing the product, everything runs on your Mac. Cost: ~$3-5
                                               │  │  Docker Container  │    │
                                               │  │  ┌──────────────┐ │    │
                                               │  │  │ Claude Code   │ │    │
-                                              │  │  │ Playwright MCP│ │    │
+                                              │  │  │ Playwright│ │    │
                                               │  │  │ Dev Server    │ │    │
                                               │  │  │ Git Repo      │ │    │
                                               │  │  └──────────────┘ │    │
@@ -539,7 +539,7 @@ For developing and testing the product, everything runs on your Mac. Cost: ~$3-5
 - Twilio account + phone number (~$3-5/month)
 - Your own API keys for Claude, Codex, Gemini
 
-**What happens:** You text your Twilio number from your iPhone. Twilio webhooks to ngrok, which tunnels to your local relay server. The relay forwards the command to Claude Code running inside the Docker container on your Mac. Claude Code does the work, takes screenshots via Playwright MCP, and the relay sends the result back via Twilio SMS/MMS to your phone.
+**What happens:** You text your Twilio number from your iPhone. Twilio webhooks to ngrok, which tunnels to your local relay server. The relay forwards the command to Claude Code running inside the Docker container on your Mac. Claude Code does the work, takes screenshots via Playwright, and the relay sends the result back via Twilio SMS/MMS to your phone.
 
 **Limitation:** Stops working when your Mac sleeps. For development this is fine — you're at your laptop anyway.
 
@@ -559,7 +559,7 @@ When ready to deploy for real users, push the same Docker image to Fly.io. The r
                                                         │  │ User VM        │  │
                                                         │  │ (Docker image) │  │
                                                         │  │ Claude Code    │  │
-                                                        │  │ Playwright MCP │  │
+                                                        │  │ Playwright │  │
                                                         │  │ Dev Server     │  │
                                                         │  └───────────────┘  │
                                                         │                      │
@@ -662,7 +662,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 - Twilio account + phone number + A2P 10DLC registration (for reliable SMS delivery)
 - ngrok (local development only — tunnels Twilio webhooks to localhost)
 - Claude Code CLI stability and headless mode compatibility (Anthropic)
-- Playwright MCP server (`@playwright/mcp`) stability
+- Playwright server (`@playwright/mcp`) stability
 - Fly.io account (production deployment and automated VM provisioning)
 - GitHub OAuth app approval for repo access
 
@@ -682,7 +682,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 | How do we securely store user API keys and GitHub tokens in a multi-tenant cloud service? | Emmanuel | Open | Encrypted at rest (AES-256), per-user encryption keys, never stored in plain text, never logged. |
 | Is phone keyboard dictation accurate enough for programming terminology? (e.g., "paymentService.ts", "fix the auth middleware") | Emmanuel | Open | Test with 50+ sample dictated commands from engineers on both iOS and Android. |
 | How do we handle the `ImageStore` migration from local VM to R2/S3 when scaling? | Emmanuel | Open | Design the interface now, implement local-only for V1. Migration is a config change, not a rewrite. |
-| How does the user configure their Claude Code setup on the VM? (clone their repo with .claude/skills/? Pre-configure during onboarding?) | Emmanuel | Open | Users need their custom skills, CLAUDE.md, and .mcp.json on the VM. Options: clone their config repo during onboarding, provide a "setup" command via SMS, or let them configure via their first session. |
+| How does the user configure their Claude Code setup on the VM? (clone their repo with .claude/skills/? Pre-configure during onboarding?) | Emmanuel | Open | Users need their custom skills and CLAUDE.md on the VM. Options: clone their config repo during onboarding, provide a "setup" command via SMS, or let them configure via their first session. |
 
 ---
 
@@ -695,9 +695,9 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 | PRD approved | TBD | This document |
 | Twilio account + phone number | TBD | Register, get number, configure A2P 10DLC (~$20 one-time) |
 | SMS echo prototype | TBD | Twilio → ngrok → local server → echo back. Send a test MMS image. Prove plumbing works. |
-| Docker image v1 | TBD | Dockerfile with Claude Code CLI + Playwright MCP + Node.js + git + Chromium. Runs locally via `docker run`. |
+| Docker image v1 | TBD | Dockerfile with Claude Code CLI + Playwright + Node.js + git + Chromium. Runs locally via `docker run`. |
 | Relay server prototype | TBD | Twilio webhook → ngrok → relay → Claude Code in Docker → response back via SMS. All on your Mac. |
-| Screenshot pipeline | TBD | Claude Code uses Playwright MCP inside Docker to capture app screenshots, relay sends via MMS |
+| Screenshot pipeline | TBD | Claude Code uses Playwright inside Docker to capture app screenshots, relay sends via MMS |
 | Diff image pipeline | TBD | Syntax-highlighted diff rendering to PNG inside Docker, sent via relay as MMS |
 | End-to-end local flow | TBD | Full loop on your Mac: text service number → relay → Claude Code in Docker → run a workflow → diffs + screenshots → approve → PR created. All from your phone. |
 
@@ -729,9 +729,9 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 
   **Local Development (your Mac):**
   - **Phase 1 (Echo):** Twilio → ngrok → local relay → echo back. Send a test MMS image. Proves SMS plumbing works end-to-end.
-  - **Phase 2 (Docker):** Build the Docker image with Claude Code + Playwright MCP. Run it locally. Relay talks to the local container.
+  - **Phase 2 (Docker):** Build the Docker image with Claude Code + Playwright. Run it locally. Relay talks to the local container.
   - **Phase 3 (Command):** Relay routes text commands to Claude Code in Docker. Agent responses come back as SMS. Text-only, no images yet.
-  - **Phase 4 (Screenshots):** Claude Code uses Playwright MCP inside Docker to capture app screenshots. Relay sends them as MMS.
+  - **Phase 4 (Screenshots):** Claude Code uses Playwright inside Docker to capture app screenshots. Relay sends them as MMS.
   - **Phase 5 (Diff images):** Add syntax-highlighted diff rendering. Code changes rendered as PNG, sent as MMS alongside screenshots.
   - **Phase 6 (End-to-end local):** Full workflow from your phone, all running on your Mac in Docker. Validate the complete experience.
 
@@ -742,7 +742,7 @@ The relay code, the Docker image, the Twilio phone number, the Claude Code confi
 
   **Scale & Polish:**
   - **Phase 10 (Beta):** Invite 10 bootcamp engineers. Monitor costs, reliability, MMS delivery across carriers.
-  - **Phase 11 (Conversational navigation):** Engineer texts "show me the login page" → Claude Code navigates via Playwright MCP → sends screenshot via MMS.
+  - **Phase 11 (Conversational navigation):** Engineer texts "show me the login page" → Claude Code navigates via Playwright → sends screenshot via MMS.
   - **Phase 12 (Multi-agent):** Add status updates for parallel agent workflows. Send review summary images.
   - **Phase 13 (CI/CD):** Deployment status updates and CI/CD integration (GitHub Actions, Vercel).
   - **Phase 14 (Polish):** Session management, error handling, `/help`, `/history`, `/cost`, composite images, MMS delivery order handling.
@@ -847,7 +847,7 @@ _Note: This is significantly cheaper than the iMessage approach, which required 
 - Twilio SMS/MMS API integration (webhooks, message sending, A2P 10DLC compliance)
 - Fly.io deployment and Machines API (automated VM provisioning per user)
 - Server-side architecture (relay server, job queues, WebSocket communication with VMs)
-- Playwright MCP configuration and headless browser automation
+- Playwright configuration and headless browser automation
 - Image generation pipeline (syntax-highlighted diff rendering to PNG, screenshot capture)
 - Claude Code headless mode and programmatic CLI control
 - Multi-tenant cloud service architecture (user isolation, encrypted key storage, session management)
@@ -885,7 +885,7 @@ _Note: This is significantly cheaper than the iMessage approach, which required 
 ### Key Architectural Decision: Why Not OpenClaw?
 OpenClaw was evaluated as a potential orchestration layer. It provides multi-channel messaging, browser automation, and Claude Code integration via plugins. However:
 - **SMS is not a first-class channel** — would require building a custom extension or using the community Clawphone plugin (voice-first, SMS secondary).
-- **Claude Code already does everything** — the user's skills, multi-agent orchestration, Playwright MCP, git operations. OpenClaw would be a middleman adding complexity without capability.
+- **Claude Code already does everything** — the user's skills, multi-agent orchestration, Playwright, git operations. OpenClaw would be a middleman adding complexity without capability.
 - **The relay is trivially simple** — ~200-300 lines of code. Not worth adding a dependency on a full orchestration platform.
 - **Future consideration:** If multi-channel expansion (WhatsApp, Telegram, Discord) becomes a priority, OpenClaw's channel abstraction could accelerate that work. The backend is designed to be transport-agnostic.
 
@@ -897,6 +897,6 @@ OpenClaw was evaluated as a potential orchestration layer. It provides multi-cha
 ### Technical References
 - [Twilio SMS/MMS API documentation](https://www.twilio.com/docs/sms)
 - [Twilio A2P 10DLC registration](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc)
-- [Playwright MCP server](https://github.com/anthropics/playwright-mcp)
+- [Playwright server](https://github.com/anthropics/playwright-mcp)
 - Claude Code CLI headless mode documentation
 - [Cloudflare R2 documentation](https://developers.cloudflare.com/r2/) (future image storage option)
