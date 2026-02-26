@@ -467,11 +467,11 @@ Or add to Dockerfile CMD as a background process. The test app only needs to run
 
 ### Phase 4d: Polish + Docs
 
-- [ ] Update `docs/plans/phases/04-phase-screenshots.md` — remove stale MCP/.mcp.json references, update to match implementation
-- [ ] Update `ARCHITECTURE.md` — add screenshot pipeline to data flow
-- [ ] Update `SECURITY.md` — document public image proxy, UUID-based access
-- [ ] Update `vm/.env.example` if any new env vars added
-- [ ] Grep for stale "Playwright MCP" / ".mcp.json" references across docs and remove
+- [x] Update `docs/plans/phases/04-phase-screenshots.md` — remove stale MCP/.mcp.json references, update to match implementation
+- [x] Update `ARCHITECTURE.md` — add screenshot pipeline to data flow
+- [x] Update `SECURITY.md` — document public image proxy, UUID-based access
+- [x] Update `vm/.env.example` if any new env vars added (none needed)
+- [x] Grep for stale "Playwright MCP" / ".mcp.json" references across docs and remove (addressed in 04-phase-screenshots.md rewrite)
 
 ## Acceptance Criteria
 
