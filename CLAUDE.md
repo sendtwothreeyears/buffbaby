@@ -2,7 +2,7 @@
 
 ## About This Project
 
-An SMS-based interface for agentic development workflows. Engineers text a phone number and control Claude Code (running on a cloud VM) entirely via SMS/MMS — no app to download, no laptop required.
+An SMS/WhatsApp-based interface for agentic development workflows. Engineers text a phone number and control Claude Code (running on a cloud VM) entirely via SMS/MMS or WhatsApp — no app to download, no laptop required.
 
 **Core thesis:** SMS is the one universal interface on every phone. Diffs are images. Previews are screenshots. Approvals are text replies. The conversation thread is the project log.
 
@@ -11,13 +11,13 @@ An SMS-based interface for agentic development workflows. Engineers text a phone
 ## Architecture
 
 ```
-Phone (SMS) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
+Phone (SMS/WhatsApp) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
 ```
 
 Three components:
-1. **Relay Server** (`server.js`, 68 LOC) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS.
-2. **Cloud VM** (`vm/`, 157 LOC) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
-3. **Twilio** — SMS/MMS transport. Webhooks inbound, API outbound.
+1. **Relay Server** (`server.js`) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS/WhatsApp.
+2. **Cloud VM** (`vm/`) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
+3. **Twilio** — SMS/MMS/WhatsApp transport. Webhooks inbound, API outbound. WhatsApp via Twilio Sandbox (optional).
 
 **Phase plan:** `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` — sequenced development phases.
 
@@ -25,7 +25,7 @@ Three components:
 
 | File | What It Does | When to Read |
 |------|-------------|--------------|
-| `server.js` | Relay server — Twilio webhooks, phone allowlist, SMS/MMS | Changing relay behavior |
+| `server.js` | Relay server — Twilio webhooks, phone allowlist, SMS/MMS/WhatsApp | Changing relay behavior |
 | `vm/vm-server.js` | VM API — Claude Code CLI wrapper, image serving | Changing VM behavior |
 | `vm/Dockerfile` | Container image — Node 22, Chromium, Claude Code | Changing container setup |
 | `docker-compose.yml` | VM orchestration — ports, memory, env | Changing local dev setup |
@@ -183,7 +183,7 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 
 | Service | Purpose |
 |---------|---------|
-| **Twilio** | SMS/MMS transport — webhooks inbound, API outbound |
+| **Twilio** | SMS/MMS/WhatsApp transport — webhooks inbound, API outbound. WhatsApp via Sandbox (optional). |
 | **Claude Code CLI** | Headless agent execution on the VM |
 | **Playwright** | Screenshot capture, page navigation, app interaction |
 | **GitHub** | Repos, PRs, OAuth for user onboarding |

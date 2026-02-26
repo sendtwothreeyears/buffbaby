@@ -3,18 +3,18 @@
 ## Three-Layer System
 
 ```
-Phone (SMS) ←→ Twilio ←→ Relay Server ←→ Docker VM (Claude Code + Playwright)
+Phone (SMS/WhatsApp) ←→ Twilio ←→ Relay Server ←→ Docker VM (Claude Code + Playwright)
 ```
 
 ### Layer 1: Relay Server (`server.js`)
 
-Express server that bridges Twilio SMS/MMS with the backend VM.
+Express server that bridges Twilio SMS/MMS/WhatsApp with the backend VM.
 
-- **Inbound:** Receives Twilio webhooks at `POST /sms`
-- **Authentication:** Phone number allowlist — only configured numbers get through
-- **Outbound:** Sends responses via Twilio API as SMS (text) and MMS (images)
+- **Inbound:** Receives Twilio webhooks at `POST /sms` (handles both SMS and WhatsApp — Twilio uses the same webhook format)
+- **Authentication:** Phone number allowlist — only configured numbers get through (WhatsApp `whatsapp:` prefix stripped for allowlist check)
+- **Outbound:** Sends responses via Twilio API as SMS (text), MMS (images), or WhatsApp — detects channel from `to` address prefix
 - **Image proxy:** `GET /images/:filename` proxies image requests from Twilio to the VM
-- **Queue:** Per-user message queue (max 5) with sequential processing
+- **Queue:** Per-user message queue (max 5) with sequential processing. SMS and WhatsApp from the same phone number have independent queues (keyed by raw `From` value)
 
 ### Layer 2: Docker VM (`vm/`)
 
@@ -34,15 +34,16 @@ Always-on container running Claude Code headlessly via HTTP API.
 
 ### Layer 3: Twilio Transport
 
-- **Inbound:** Webhooks deliver SMS messages to the relay server
-- **Outbound:** Twilio REST API sends SMS/MMS responses
+- **Inbound:** Webhooks deliver SMS and WhatsApp messages to the relay server (same `POST /sms` endpoint — Twilio uses identical webhook format for both)
+- **Outbound:** Twilio REST API sends SMS/MMS/WhatsApp responses — channel detected from `to` address prefix
+- **WhatsApp:** Via Twilio Sandbox. Users must send a join code to opt in. 24-hour session window for replies. Configured via optional `TWILIO_WHATSAPP_NUMBER` env var.
 - **MMS:** Images must be < 1MB, accessible via public URL (max 10 media per message)
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Relay server — receives SMS, authenticates, proxies images, sends responses |
+| `server.js` | Relay server — receives SMS/WhatsApp, authenticates, proxies images, sends responses |
 | `vm/vm-server.js` | VM HTTP API — wraps Claude Code CLI, screenshot capture, image cleanup |
 | `vm/CLAUDE.md` | Claude Code system prompt — documents `/screenshot` endpoint |
 | `vm/Dockerfile` | Docker image — Node 22, Chromium, Claude Code, Playwright |
