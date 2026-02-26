@@ -29,6 +29,7 @@ const MOBILE_VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2 };
 const DESKTOP_VIEWPORT = { width: 1440, height: 900, deviceScaleFactor: 2 };
 const NAV_TIMEOUT_MS = 15_000;
 const MAX_IMAGE_BYTES = 600_000;
+const HARD_CEILING_BYTES = 1_000_000; // MMS carrier limit
 const JPEG_QUALITY = 75;
 const JPEG_QUALITY_FALLBACK = 50;
 
@@ -191,12 +192,37 @@ app.post("/screenshot", async (req, res) => {
     const filename = `${crypto.randomUUID()}.jpeg`;
     const filepath = path.join(IMAGES_DIR, filename);
 
-    // JPEG capture — try at default quality, retry once at lower quality if too large
+    // JPEG capture — iterative compression with DPR fallback
     let quality = JPEG_QUALITY;
     let buffer = await page.screenshot({ type: "jpeg", quality, fullPage });
     if (buffer.length > MAX_IMAGE_BYTES) {
       quality = JPEG_QUALITY_FALLBACK;
       buffer = await page.screenshot({ type: "jpeg", quality, fullPage });
+    }
+
+    // Hard ceiling: if still > 1MB, retry at 1x DPR
+    if (buffer.length > HARD_CEILING_BYTES) {
+      console.log(`[SCREENSHOT] ${buffer.length} bytes exceeds 1MB ceiling, retrying at 1x DPR`);
+      await page.setViewportSize({ width: viewportConfig.width, height: viewportConfig.height });
+      // Playwright doesn't support changing DPR on an existing context, so create a new page
+      const page1x = await browser.newPage({
+        viewport: { ...viewportConfig, deviceScaleFactor: 1 },
+      });
+      await page1x.goto(url, { waitUntil: "networkidle", timeout: NAV_TIMEOUT_MS });
+      quality = JPEG_QUALITY;
+      buffer = await page1x.screenshot({ type: "jpeg", quality, fullPage });
+      if (buffer.length > HARD_CEILING_BYTES) {
+        quality = JPEG_QUALITY_FALLBACK;
+        buffer = await page1x.screenshot({ type: "jpeg", quality, fullPage });
+      }
+      await page1x.close();
+
+      if (buffer.length > HARD_CEILING_BYTES) {
+        return res.status(502).json({
+          success: false,
+          error: `Screenshot too large (${buffer.length} bytes) even at 1x DPR and quality ${quality}. MMS limit is 1MB.`,
+        });
+      }
     }
 
     await fs.writeFile(filepath, buffer);
