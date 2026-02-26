@@ -1,0 +1,12 @@
+{
+  "name": "textslash-vm",
+  "version": "0.1.0",
+  "private": true,
+  "main": "vm-server.js",
+  "scripts": {
+    "start": "node vm-server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
