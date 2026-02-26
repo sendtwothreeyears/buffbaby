@@ -19,12 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Tell Playwright to use system Chromium
-ENV CHROME_PATH=/usr/bin/chromium
+# Tell Playwright to use system Chromium (skip downloading its own)
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI and Playwright CLI globally
+RUN npm install -g @anthropic-ai/claude-code playwright
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ COPY package.json ./
 RUN npm install --production
 
 # Copy application files
-COPY vm-server.js .mcp.json ./
+COPY vm-server.js ./
 
 # Create images directory for Phase 4+
 RUN mkdir -p /tmp/images
