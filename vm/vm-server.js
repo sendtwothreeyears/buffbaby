@@ -1,6 +1,9 @@
 const express = require("express");
 const { spawn } = require("child_process");
+const crypto = require("crypto");
+const fs = require("fs/promises");
 const path = require("path");
+const { chromium } = require("playwright");
 
 const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000" } = process.env;
 
@@ -19,10 +22,20 @@ if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) {
 const IDLE_TIMEOUT = Number(IDLE_TIMEOUT_MS);
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB cap on stdout/stderr
 const IMAGES_DIR = "/tmp/images";
+const IMAGE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+const MAX_IMAGE_FILES = 100;
+const MOBILE_VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2 };
+const DESKTOP_VIEWPORT = { width: 1440, height: 900, deviceScaleFactor: 2 };
+const NAV_TIMEOUT_MS = 15_000;
+const MAX_IMAGE_BYTES = 600_000;
+const MIN_JPEG_QUALITY = 30;
+
 const app = express();
 let busy = false;
 let activeChild = null;
 let lastActivity = Date.now();
+let pendingImages = [];
 
 app.use(express.json());
 
@@ -43,6 +56,7 @@ app.post("/command", (req, res) => {
   }
 
   busy = true;
+  pendingImages = [];
   lastActivity = Date.now();
   const start = Date.now();
   const stdoutChunks = [];
@@ -106,12 +120,14 @@ app.post("/command", (req, res) => {
     const stderrOut = Buffer.concat(stderrChunks).toString();
 
     if (timedOut) {
+      const images = [...pendingImages];
+      pendingImages = [];
       console.log(`[TIMEOUT] Killed PID ${child.pid} after ${durationMs}ms`);
       return res.status(408).json({
         error: "timeout",
         message: `Command timed out after ${TIMEOUT}ms`,
         text: textOut || null,
-        images: [],
+        images,
         durationMs,
       });
     }
@@ -126,8 +142,10 @@ app.post("/command", (req, res) => {
       });
     }
 
-    console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output`);
-    res.json({ text: textOut, images: [], exitCode: 0, durationMs });
+    const images = [...pendingImages];
+    pendingImages = [];
+    console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
+    res.json({ text: textOut, images, exitCode: 0, durationMs });
   });
 });
 
@@ -146,6 +164,100 @@ app.get("/images/:filename", (req, res) => {
     if (err) res.sendStatus(404);
   });
 });
+
+// POST /screenshot — capture a web page with Playwright
+app.post("/screenshot", async (req, res) => {
+  const { url, viewport = "mobile", fullPage = false } = req.body || {};
+
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ success: false, error: "url is required" });
+  }
+  if (viewport !== "mobile" && viewport !== "desktop") {
+    return res.status(400).json({ success: false, error: 'viewport must be "mobile" or "desktop"' });
+  }
+
+  const viewportConfig = viewport === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT;
+  let browser;
+
+  try {
+    browser = await chromium.launch({ args: ["--no-sandbox"] });
+    const page = await browser.newPage({ viewport: viewportConfig });
+    await page.goto(url, { waitUntil: "networkidle", timeout: NAV_TIMEOUT_MS });
+
+    const filename = `${crypto.randomUUID()}.jpeg`;
+    const filepath = path.join(IMAGES_DIR, filename);
+
+    // Iterative JPEG compression — start at quality 80, reduce until under threshold
+    let quality = 80;
+    let buffer;
+    do {
+      buffer = await page.screenshot({ type: "jpeg", quality, fullPage: !!fullPage });
+      if (buffer.length <= MAX_IMAGE_BYTES) break;
+      quality -= 10;
+    } while (quality >= MIN_JPEG_QUALITY);
+
+    await fs.writeFile(filepath, buffer);
+    pendingImages.push({ type: "screenshot", filename, url: `/images/${filename}` });
+
+    console.log(`[SCREENSHOT] ${filename} (${buffer.length} bytes, q=${quality}) ${url}`);
+    res.json({
+      success: true,
+      filename,
+      url: `/images/${filename}`,
+      viewport: viewportConfig,
+      sizeBytes: buffer.length,
+    });
+  } catch (err) {
+    console.error(`[SCREENSHOT_ERR] ${err.message}`);
+    res.status(502).json({ success: false, error: err.message });
+  } finally {
+    if (browser) await browser.close();
+  }
+});
+
+// Image cleanup — remove expired images every 5 minutes
+setInterval(async () => {
+  try {
+    const files = await fs.readdir(IMAGES_DIR);
+    const now = Date.now();
+    let cleaned = 0;
+
+    // If over cap, delete oldest first regardless of age
+    if (files.length > MAX_IMAGE_FILES) {
+      const stats = await Promise.all(
+        files.map(async (f) => {
+          const fp = path.join(IMAGES_DIR, f);
+          const stat = await fs.stat(fp);
+          return { file: f, path: fp, mtimeMs: stat.mtimeMs };
+        })
+      );
+      stats.sort((a, b) => a.mtimeMs - b.mtimeMs);
+      const excess = stats.slice(0, files.length - MAX_IMAGE_FILES);
+      for (const { path: fp } of excess) {
+        await fs.unlink(fp);
+        cleaned++;
+      }
+    }
+
+    // TTL-based cleanup
+    for (const file of await fs.readdir(IMAGES_DIR)) {
+      const fp = path.join(IMAGES_DIR, file);
+      const stat = await fs.stat(fp);
+      if (now - stat.mtimeMs > IMAGE_TTL_MS) {
+        await fs.unlink(fp);
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log(`[CLEANUP] Removed ${cleaned} expired image(s)`);
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      console.error(`[CLEANUP_ERR] ${err.message}`);
+    }
+  }
+}, CLEANUP_INTERVAL_MS);
 
 // Graceful shutdown — kill process group, not just the child
 process.on("SIGTERM", () => {
