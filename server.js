@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const path = require("path");
 const twilio = require("twilio");
 
 const {
@@ -32,6 +33,7 @@ const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
@@ -51,6 +53,34 @@ function getState(phone) {
 // --- Health endpoint ---
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "textslash-relay" });
+});
+
+// --- Web chat dev tool ---
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.post("/chat", async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) {
+    return res.status(400).json({ error: "Text is required" });
+  }
+
+  console.log(`[CHAT] Received: ${text.substring(0, 80)}`);
+
+  try {
+    const data = await forwardToVM(text);
+    console.log(`[CHAT] Response (${data.durationMs}ms, exit ${data.exitCode}, ${(data.images || []).length} image(s))`);
+    res.json(data);
+  } catch (err) {
+    const status = err.status || 500;
+    console.error(`[CHAT] Error: ${err.message}`);
+    res.status(status).json({
+      error: status === 408 ? "timeout" : status === 409 ? "busy" : "error",
+      text: err.text || null,
+      images: err.images || [],
+    });
+  }
 });
 
 // --- Image proxy — Twilio fetches images from relay, relay proxies from VM ---
