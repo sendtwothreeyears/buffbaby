@@ -35,3 +35,46 @@ Deliverables:
 - The relay replaces the echo logic from Phase 1 — same server, upgraded behavior.
 - The concurrency guard is a per-phone-number queue. If `busy`, queue the message (up to 5) and reply "Got it, I'll process this next." When Claude Code responds, dequeue and process next, or set idle. Queue full (6+) replies "Queue full, please wait."
 - Claude Code may return long responses. SMS segments are 160 chars — Twilio handles concatenation, but consider truncating very long responses with a note. Full "Reply 'more'" support is deferred to Phase 16 (UX Polish).
+
+## Review
+
+**Status:** PASS
+**Reviewed:** 2026-02-26
+
+### Validation Results
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| Text "what is 2+2", get answer back as SMS | PASS | Relay forwards to VM `/command`, Claude Code responds, relay sends SMS. User confirmed working via live test during ship. |
+| Relay forwards SMS to VM `/command` | PASS | `server.js:191` — `fetch(CLAUDE_HOST/command)` with JSON body `{ text }` |
+| Async webhook pattern (immediate 200 OK) | PASS | `server.js:100` — `res.sendStatus(200)` before any async processing |
+| Twilio webhook signature validation | PASS | `server.js:84-86` — `twilio.webhook()` middleware on `/sms` route |
+| Phone number allowlist | PASS | `server.js:94-97` — checks `allowlist.has(from)`, silently drops non-allowlisted |
+| Error handling (connection refused, 500, timeout) | PASS | `server.js:163-171` — maps error codes to user-friendly SMS messages. Cold-start retry on ECONNREFUSED (`server.js:211-216`) |
+| Per-user queue (5-message cap) | PASS | `server.js:42` — `Map<phone, {busy, queue[]}>`. Cap at 5 (`server.js:118`). "Got it, I'll process this next" on queue. "Queue full" at cap. |
+| `.env.example` with CLAUDE_HOST | PASS | `.env.example:13` — `CLAUDE_HOST=http://localhost:3001` |
+| Session resume (`--continue` flag) | PASS | `vm-server.js:69` — `spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"])` |
+| Idle shutdown (30 min) | PASS | `vm-server.js:281-286` — checks `lastActivity` every 60s, exits after `IDLE_TIMEOUT_MS` (default 1800000 = 30 min). `docker-compose.yml:9` — `restart: unless-stopped` |
+| Response truncation at 1500 chars | PASS | `server.js:153-155` — truncates with `[Response truncated]` suffix |
+
+### Code Quality
+
+- **Relay (`server.js`):** Clean async pattern. Per-user state via Map. Safety net clears busy flag on unhandled errors (`server.js:130-134`). Logging follows established prefix conventions.
+- **VM (`vm-server.js`):** `spawn` with `detached: true` + process group killing. `lastActivity` updated on both command start and completion. Prompt piped via stdin (avoids `ARG_MAX`).
+- **Cold-start retry:** Single retry after 4s on `ECONNREFUSED` — handles Docker container cold starts gracefully.
+- **Concurrency:** Synchronous `state.busy = true` before any `await` prevents race conditions on the relay side. VM has its own `busy` boolean mutex returning 409.
+- **Learnings applied:** Webhook parsing uses `express.urlencoded()` (not JSON). Non-root user. Process group management. All confirmed from `docs/solutions/`.
+
+### Issues Found
+
+None. All deliverables implemented correctly. Code matches the plan.
+
+### Tech Debt
+
+- **In-memory queue state** — relay queue is lost on restart. Queued messages and busy flags reset. Acceptable for alpha; production needs persistence or at minimum logging of dropped messages.
+- **Hardcoded relay timeout** (`RELAY_TIMEOUT_MS = 330_000`) — derived from VM's `COMMAND_TIMEOUT_MS` (300s + 30s buffer) but not dynamically linked. If VM timeout changes, relay timeout must be manually updated.
+- **No plan file on main** — `docs/plans/2026-02-26-feat-connect-relay-to-vm-plan.md` referenced in tasks but wasn't committed (likely in the untracked files on the feature branch).
+
+### Next Steps
+
+Phase complete. Next: **Phase 4 — Screenshots** (`04-phase-screenshots.md`).
