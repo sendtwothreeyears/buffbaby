@@ -445,10 +445,10 @@ Or add to Dockerfile CMD as a background process. The test app only needs to run
 
 **Files:** `server.js`
 
-- [ ] Add `GET /images/:filename` proxy route with filename validation
-- [ ] Update `sendSMS` → `sendMessage` to accept `mediaUrl` parameter
-- [ ] Update `processCommand` to read `data.images` and construct public media URLs
-- [ ] Add `[IMAGE_PROXY]` / `[MMS]` logging
+- [x] Add `GET /images/:filename` proxy route with filename validation
+- [x] Update `sendSMS` → `sendMessage` to accept `mediaUrl` parameter
+- [x] Update `processCommand` to read `data.images` and construct public media URLs
+- [x] Add `[IMAGE_PROXY]` / `[MMS]` logging
 - [ ] Test: send a command that produces an image, verify MMS arrives on phone
 
 **Validates:** End-to-end image delivery from VM through relay to phone.

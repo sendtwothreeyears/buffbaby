@@ -36,6 +36,7 @@ app.use(express.urlencoded({ extended: false }));
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
 const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
+const MAX_MMS_MEDIA = 10; // Twilio limit: 10 media URLs per MMS
 
 // --- Per-user state ---
 const userState = new Map(); // Map<phone, { busy: boolean, queue: string[] }>
@@ -50,6 +51,33 @@ function getState(phone) {
 // --- Health endpoint ---
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "textslash-relay" });
+});
+
+// --- Image proxy — Twilio fetches images from relay, relay proxies from VM ---
+app.get("/images/:filename", async (req, res) => {
+  const { filename } = req.params;
+
+  // Validate filename: UUID.jpeg only — prevents path traversal
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpeg$/.test(filename)) {
+    return res.sendStatus(400);
+  }
+
+  try {
+    const vmUrl = `${CLAUDE_HOST}/images/${encodeURIComponent(filename)}`;
+    const response = await fetch(vmUrl);
+
+    if (!response.ok) {
+      return res.sendStatus(response.status);
+    }
+
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=300");
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error(`[IMAGE_PROXY_ERR] ${filename}: ${err.message}`);
+    res.sendStatus(502);
+  }
 });
 
 // --- Twilio webhook signature validation ---
@@ -76,12 +104,12 @@ app.post("/sms", webhookValidator, async (req, res) => {
   // MMS check (text-only for Phase 3) — before empty-body check so
   // image-only messages get the right error ("text only" not "empty")
   if (parseInt(req.body.NumMedia || "0", 10) > 0) {
-    return sendSMS(from, "I can only process text messages for now.");
+    return sendMessage(from, "I can only process text messages for now.");
   }
 
   // Empty message check
   if (!body) {
-    return sendSMS(from, "I received an empty message.");
+    return sendMessage(from, "I received an empty message.");
   }
 
   // Queue or forward
@@ -89,11 +117,11 @@ app.post("/sms", webhookValidator, async (req, res) => {
   if (state.busy) {
     if (state.queue.length >= MAX_QUEUE_DEPTH) {
       console.log(`[QUEUE_FULL] ${from}`);
-      return sendSMS(from, "Queue full, please wait for current tasks to finish.");
+      return sendMessage(from, "Queue full, please wait for current tasks to finish.");
     }
     state.queue.push(body);
     console.log(`[QUEUED] ${from} (depth: ${state.queue.length})`);
-    return sendSMS(from, "Got it, I'll process this next.");
+    return sendMessage(from, "Got it, I'll process this next.");
   }
 
   state.busy = true; // Synchronous — before any await
@@ -115,15 +143,22 @@ async function processCommand(from, text, state) {
       console.log(`[FORWARD] ${from}: ${current.substring(0, 80)}`);
       const data = await forwardToVM(current);
 
+      // Construct public media URLs from images array
+      const mediaUrls = (data.images || [])
+        .slice(0, MAX_MMS_MEDIA)
+        .map((img) => `${PUBLIC_URL}${img.url}`);
+
       if (data.text) {
         const response =
           data.text.length > 1500
             ? data.text.substring(0, 1500) + "\n\n[Response truncated]"
             : data.text;
-        console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode})`);
-        await sendSMS(from, response);
+        console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
+        await sendMessage(from, response, mediaUrls);
+      } else if (mediaUrls.length > 0) {
+        await sendMessage(from, "Here's a screenshot:", mediaUrls);
       } else {
-        await sendSMS(from, "Claude returned an empty response.");
+        await sendMessage(from, "Claude returned an empty response.");
       }
     } catch (err) {
       console.error(`[ERROR] ${from}: ${err.message}`);
@@ -133,7 +168,7 @@ async function processCommand(from, text, state) {
           : err.status === 408
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
-      await sendSMS(from, message);
+      await sendMessage(from, message);
     }
 
     // Dequeue next message or mark idle
@@ -184,14 +219,17 @@ async function forwardToVM(text) {
   }
 }
 
-// --- Outbound SMS helper ---
-async function sendSMS(to, body) {
+// --- Outbound SMS/MMS helper ---
+async function sendMessage(to, body, mediaUrls = []) {
   try {
-    await client.messages.create({
-      to,
-      from: TWILIO_PHONE_NUMBER,
-      body,
-    });
+    const params = { to, from: TWILIO_PHONE_NUMBER, body };
+    if (mediaUrls.length > 0) {
+      params.mediaUrl = mediaUrls;
+    }
+    await client.messages.create(params);
+    if (mediaUrls.length > 0) {
+      console.log(`[MMS] ${to}: ${mediaUrls.length} image(s)`);
+    }
     console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
   } catch (err) {
     console.error(`[OUTBOUND_ERROR] ${to}: ${err.message}`);
