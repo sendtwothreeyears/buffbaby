@@ -168,7 +168,15 @@ async function processCommand(from, text, state) {
           : err.status === 408
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
-      await sendMessage(from, message);
+
+      // Surface any images captured before the error (partial results)
+      const errorMediaUrls = (err.images || [])
+        .slice(0, MAX_MMS_MEDIA)
+        .map((img) => `${PUBLIC_URL}${img.url}`);
+      const errorText = err.text
+        ? `${err.text.length > 1400 ? err.text.substring(0, 1400) + "\n\n[Truncated]" : err.text}\n\n${message}`
+        : message;
+      await sendMessage(from, errorText, errorMediaUrls);
     }
 
     // Dequeue next message or mark idle
@@ -198,6 +206,8 @@ async function forwardToVM(text) {
         const errBody = await res.json().catch(() => ({}));
         throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
           status: res.status,
+          images: errBody.images || [],
+          text: errBody.text || null,
         });
       }
       return await res.json();

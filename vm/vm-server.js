@@ -138,10 +138,14 @@ app.post("/command", (req, res) => {
     }
 
     if (code !== 0) {
-      console.log(`[DONE]    Exit ${code}, ${durationMs}ms`);
+      const images = [...pendingImages];
+      pendingImages = [];
+      console.log(`[DONE]    Exit ${code}, ${durationMs}ms, ${images.length} image(s)`);
       return res.status(500).json({
         error: "execution_error",
         message: stderrOut || `Process exited with code ${code}`,
+        text: textOut || null,
+        images,
         exitCode: code,
         durationMs,
       });
