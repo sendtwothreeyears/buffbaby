@@ -460,10 +460,32 @@ async function forwardToVM(text, from, state) {
   try {
     return await doFetch();
   } catch (err) {
-    // Cold-start retry on connection error
+    // Cold-start retry: send "Waking up..." and poll /health until VM is ready
     if (err.cause?.code === "ECONNREFUSED" || err.message.includes("ECONNREFUSED")) {
-      console.log("[RETRY] VM connection refused, retrying in 4s (cold start?)");
-      await new Promise((r) => setTimeout(r, 4000));
+      console.log("[COLD-START] VM not reachable, sending wake-up notice");
+      await sendMessage(from, "\u23f3 Waking up your VM...");
+
+      const MAX_WAIT = 30_000;
+      const POLL_INTERVAL = 3_000;
+      const start = Date.now();
+
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        try {
+          const healthRes = await fetch(`${CLAUDE_HOST}/health`, {
+            signal: AbortSignal.timeout(2_000),
+          });
+          if (healthRes.ok) {
+            console.log("[COLD-START] VM is up, sending command");
+            return await doFetch();
+          }
+        } catch {
+          // Still waking up, keep polling
+        }
+      }
+
+      // Final attempt after max wait
+      console.log("[COLD-START] Max wait reached, final attempt");
       return await doFetch();
     }
     throw err;
@@ -505,10 +527,21 @@ async function sendMessage(to, body, mediaUrls = []) {
 }
 
 // --- Start server ---
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[STARTUP] Relay listening on port ${PORT}`);
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
   console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/webhook`);
   console.log(`[STARTUP] Allowlist: ${[...allowlist].join(", ")}`);
   console.log(`[STARTUP] WhatsApp: ${TWILIO_WHATSAPP_NUMBER}`);
+});
+
+// --- Graceful shutdown for Fly.io ---
+process.on("SIGTERM", () => {
+  console.log("[SHUTDOWN] SIGTERM received, closing server");
+  server.close(() => {
+    console.log("[SHUTDOWN] Server closed");
+    process.exit(0);
+  });
+  // Force exit after 10s if connections don't drain
+  setTimeout(() => process.exit(0), 10_000);
 });
