@@ -2,7 +2,7 @@
 
 > **SUPERSEDED:** This file is the original flat phase plan. The canonical version is now in `docs/plans/phases/` with individual files per phase, reflecting the updated platform framing (SMS bridge to Claude Code, not a specific workflow tool). See `docs/plans/phases/00-overview.md`.
 
-**Source PRD:** PRD_SMS_AGENTIC_COCKPIT.md
+**Source PRD:** PRD_WHATSAPP_AGENTIC_COCKPIT.md
 **Generated:** 2026-02-24 (original), 2026-02-25 (superseded by docs/plans/phases/)
 **Method:** `/phase-prd`
 **Total:** 16 phases, 27 tasks
