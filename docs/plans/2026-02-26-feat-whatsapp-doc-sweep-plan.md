@@ -1,7 +1,7 @@
 ---
 title: "Phase 4.3: WhatsApp-Only Documentation Sweep"
 type: feat
-status: active
+status: completed
 date: 2026-02-26
 brainstorm: docs/brainstorms/2026-02-26-phase-4.3-whatsapp-doc-update-brainstorm.md
 ---
