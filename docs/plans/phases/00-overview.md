@@ -50,7 +50,7 @@ _Characteristics: Hardcoded `.env`, no database, no website, no payments._
 - Phase 2: Docker → `02-phase-docker.md`
 - Phase 3: Command → `03-phase-command.md`
 - Phase 4: Screenshots → `04-phase-screenshots.md`
-- Phase 4.2: WhatsApp Channel → (completed — WhatsApp is now the sole channel)
+- Phase 4.2: WhatsApp Channel → `04.2-phase-whatsapp.md`
 - Phase 5: Diffs → `05-phase-diffs.md`
 - Phase 6: End-to-End Local → `06-phase-e2e-local.md`
 
