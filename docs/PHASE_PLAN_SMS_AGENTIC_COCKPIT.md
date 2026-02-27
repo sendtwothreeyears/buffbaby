@@ -13,14 +13,14 @@
 
 1. **Messaging layer** — Twilio SMS/MMS (inbound/outbound)
 2. **Relay layer** — thin Node.js server (webhook handler + router)
-3. **Compute layer** — Docker container with Claude Code + Playwright MCP
+3. **Compute layer** — Docker container with Claude Code + Playwright
 4. **Image layer** — screenshot/diff rendering + serving from VM
 5. **Onboarding layer** — signup website, database, provisioning, payments
 
 ## Dependency Chain
 
 ```
-Twilio → Relay → Docker/Claude Code → Playwright MCP → Image serving
+Twilio → Relay → Docker/Claude Code → Playwright → Image serving
                                                          ↓
                                               MMS delivery back through Twilio
 ```
@@ -45,11 +45,11 @@ _Characteristics: Hardcoded `.env`, no database, no website, no payments._
   - `/ship` set up Twilio account, phone number, A2P 10DLC registration, ngrok, and a Node.js relay server that echoes incoming SMS back and sends a static test image via MMS
 
 ### Phase 2: Docker
-- **Build:** Dockerfile containing Claude Code CLI, Playwright MCP, Node.js, git, Chromium. Thin HTTP API wrapper inside the container that accepts a command string and returns Claude Code's text output.
+- **Build:** Dockerfile containing Claude Code CLI, Playwright, Node.js, git, Chromium. Thin HTTP API wrapper inside the container that accepts a command string and returns Claude Code's text output.
 - **Depends on:** Nothing (can be built in parallel with Phase 1)
 - **Done when:** `docker run` starts the container, you can `curl` the HTTP endpoint with a prompt, and Claude Code responds with text.
 - **Tasks:**
-  - `/ship` build Dockerfile with Claude Code CLI + Playwright MCP + Node.js + git + Chromium, expose HTTP API that accepts a command and returns Claude Code headless output
+  - `/ship` build Dockerfile with Claude Code CLI + Playwright + Node.js + git + Chromium, expose HTTP API that accepts a command and returns Claude Code headless output
 
 ### Phase 3: Command
 - **Build:** Connect the relay (Phase 1) to the Docker container (Phase 2). Relay receives SMS, forwards to Claude Code in Docker via HTTP, sends Claude Code's text response back as SMS.
@@ -59,11 +59,11 @@ _Characteristics: Hardcoded `.env`, no database, no website, no payments._
   - `/ship` relay forwards incoming SMS text to Claude Code HTTP API in Docker container and sends the response back via Twilio SMS
 
 ### Phase 4: Screenshots
-- **Build:** Claude Code uses Playwright MCP inside Docker to capture screenshots of the running dev server. Relay fetches the screenshot from the container's image endpoint and sends it via Twilio MMS.
+- **Build:** Claude Code uses Playwright inside Docker to capture screenshots of the running dev server. Relay fetches the screenshot from the container's image endpoint and sends it via Twilio MMS.
 - **Depends on:** Phase 3
 - **Done when:** You text "show me the app" and receive a screenshot of the running app on your phone via MMS.
 - **Tasks:**
-  - `/ship` configure Playwright MCP in Docker container, add image serving endpoint, relay fetches screenshots and sends via Twilio MMS
+  - `/ship` configure Playwright in Docker container, add image serving endpoint, relay fetches screenshots and sends via Twilio MMS
   - `/ship` start a sample dev server (Next.js or Vite) inside the Docker container that Playwright can capture
 
 ### Phase 5: Diffs
@@ -128,11 +128,11 @@ _Characteristics: Multi-user, error handling, rich features._
   - `/ship` add MMS image labeling/numbering to handle out-of-order delivery
 
 ### Phase 11: Conversational Navigation
-- **Build:** Engineer texts "show me the settings page" or "click the login button" → Claude Code navigates via Playwright MCP → sends new screenshot.
+- **Build:** Engineer texts "show me the settings page" or "click the login button" → Claude Code navigates via Playwright → sends new screenshot.
 - **Depends on:** Phase 10 (validated that basic flow works with real users)
 - **Done when:** You text "show me the login page", get a screenshot. Text "click the submit button", get an updated screenshot.
 - **Tasks:**
-  - `/ship` implement conversational page navigation — relay passes natural language navigation commands to Claude Code, which drives Playwright MCP and returns screenshots
+  - `/ship` implement conversational page navigation — relay passes natural language navigation commands to Claude Code, which drives Playwright and returns screenshots
 
 ### Phase 12: Multi-Agent
 - **Build:** Status updates for parallel agent workflows (`/team_three_review`, `/investigate`). Each agent's progress reported as separate SMS updates.

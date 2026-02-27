@@ -78,9 +78,9 @@ Phase 3: Command Relay
     - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-sms-relay-plan.md
 
 Phase 4: Screenshots
-  - [ ] Claude Code captures screenshots via Playwright MCP, sent back via Twilio MMS
+  - [ ] Claude Code captures screenshots via Playwright, sent back via Twilio MMS
     - Brainstorm: /workflow:brainstorm screenshot capture and MMS delivery approach
-    - Plan: /workflow:plan screenshot pipeline with Playwright MCP and Twilio MMS
+    - Plan: /workflow:plan screenshot pipeline with Playwright and Twilio MMS
     - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-screenshot-pipeline-plan.md
 ```
 

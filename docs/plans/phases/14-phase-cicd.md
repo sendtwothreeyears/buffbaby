@@ -6,7 +6,7 @@
 
 ## What You Build
 
-After a PR is created, the relay listens for GitHub Actions webhook events and sends build/deploy status updates as SMS. When a staging deployment completes, Claude Code captures a screenshot of the staging URL via Playwright MCP and the relay sends it via MMS.
+After a PR is created, the relay listens for GitHub Actions webhook events and sends build/deploy status updates as SMS. When a staging deployment completes, Claude Code captures a screenshot of the staging URL via Playwright and the relay sends it via MMS.
 
 Deliverables:
 - GitHub Actions webhook listener on the relay server

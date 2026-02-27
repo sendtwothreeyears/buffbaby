@@ -9,7 +9,7 @@
 Push the same Docker image to Fly.io. Deploy the relay server to Fly.io (or Railway). Update Twilio's webhook URL from ngrok to the Fly.io public URL. No code changes — this is a config change.
 
 Deliverables:
-- `fly.toml` for the Docker VM container (Claude Code + Playwright MCP)
+- `fly.toml` for the Docker VM container (Claude Code + Playwright)
 - `fly.toml` for the relay server (or Railway config)
 - Docker image pushed to Fly.io registry
 - Twilio webhook URL updated from ngrok to Fly.io

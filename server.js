@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const path = require("path");
 const twilio = require("twilio");
 
 const {
@@ -32,6 +33,7 @@ const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
@@ -51,6 +53,34 @@ function getState(phone) {
 // --- Health endpoint ---
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "textslash-relay" });
+});
+
+// --- Web chat dev tool ---
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.post("/chat", async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) {
+    return res.status(400).json({ error: "Text is required" });
+  }
+
+  console.log(`[CHAT] Received: ${text.substring(0, 80)}`);
+
+  try {
+    const data = await forwardToVM(text);
+    console.log(`[CHAT] Response (${data.durationMs}ms, exit ${data.exitCode}, ${(data.images || []).length} image(s))`);
+    res.json(data);
+  } catch (err) {
+    const status = err.status || 500;
+    console.error(`[CHAT] Error: ${err.message}`);
+    res.status(status).json({
+      error: status === 408 ? "timeout" : status === 409 ? "busy" : "error",
+      text: err.text || null,
+      images: err.images || [],
+    });
+  }
 });
 
 // --- Image proxy — Twilio fetches images from relay, relay proxies from VM ---
@@ -168,7 +198,15 @@ async function processCommand(from, text, state) {
           : err.status === 408
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
-      await sendMessage(from, message);
+
+      // Surface any images captured before the error (partial results)
+      const errorMediaUrls = (err.images || [])
+        .slice(0, MAX_MMS_MEDIA)
+        .map((img) => `${PUBLIC_URL}${img.url}`);
+      const errorText = err.text
+        ? `${err.text.length > 1400 ? err.text.substring(0, 1400) + "\n\n[Truncated]" : err.text}\n\n${message}`
+        : message;
+      await sendMessage(from, errorText, errorMediaUrls);
     }
 
     // Dequeue next message or mark idle
@@ -198,6 +236,8 @@ async function forwardToVM(text) {
         const errBody = await res.json().catch(() => ({}));
         throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
           status: res.status,
+          images: errBody.images || [],
+          text: errBody.text || null,
         });
       }
       return await res.json();
