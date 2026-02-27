@@ -20,3 +20,11 @@ The relay's in-memory state (`userState` Map — queue, approval timers, busy fl
 **Why deferred:** Relay restarts are rare, and for single-user deployment the impact is low — user just resends their message. Not worth the added complexity for Phase 7 MVP.
 
 **When to revisit:** Phase 8 (multi-user) where losing state affects multiple users simultaneously.
+
+## 3. Validate Self-Hosted Provisioning End-to-End
+
+Run `scripts/setup.sh` with a test prefix (e.g., `test-ts`) on a fresh Fly.io account to confirm the full provisioning flow works: app creation, secret injection, Dockerfile builds on Fly.io's remote builders, Flycast networking, health checks. Then configure Twilio webhook and send a WhatsApp message to verify the deployed stack responds. Tear down with `scripts/teardown.sh` after.
+
+**Why deferred:** Requires interactive terminal session with live Fly.io credentials and Twilio webhook reconfiguration. Code-reviewed and all flyctl commands match the proven Phase 7 deployment.
+
+**When to revisit:** Before sharing the repo publicly or onboarding the first external user.
