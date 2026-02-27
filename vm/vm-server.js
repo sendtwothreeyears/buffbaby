@@ -1,5 +1,5 @@
 const express = require("express");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
@@ -42,6 +42,33 @@ let lastActivity = Date.now();
 let pendingImages = [];
 
 app.use(express.json());
+
+// Collect uncommitted git diffs after command execution
+function collectDiffs() {
+  try {
+    const diff = execSync("git diff HEAD --no-color", {
+      cwd: process.cwd(),
+      timeout: 2000,
+      maxBuffer: 512 * 1024,
+      encoding: "utf-8",
+    });
+
+    if (!diff.trim()) return null;
+
+    const summary = execSync("git diff HEAD --stat --no-color", {
+      cwd: process.cwd(),
+      timeout: 2000,
+      maxBuffer: 64 * 1024,
+      encoding: "utf-8",
+    });
+
+    const summaryLine = summary.trim().split("\n").pop()?.trim() || "";
+
+    return { diff, summary: summaryLine };
+  } catch {
+    return null;
+  }
+}
 
 // POST /command — run a prompt through Claude Code
 app.post("/command", (req, res) => {
@@ -114,46 +141,62 @@ app.post("/command", (req, res) => {
     });
   });
 
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     clearTimeout(timer);
-    busy = false;
-    activeChild = null;
     lastActivity = Date.now();
     const durationMs = Date.now() - start;
     const textOut = Buffer.concat(stdoutChunks).toString();
     const stderrOut = Buffer.concat(stderrChunks).toString();
 
-    if (timedOut) {
+    try {
+      const diffResult = collectDiffs();
+
+      if (timedOut) {
+        const images = [...pendingImages];
+        pendingImages = [];
+        console.log(`[TIMEOUT] Killed PID ${child.pid} after ${durationMs}ms`);
+        return res.status(408).json({
+          error: "timeout",
+          message: `Command timed out after ${TIMEOUT}ms`,
+          text: textOut || null,
+          images,
+          diffs: diffResult?.diff || undefined,
+          diffSummary: diffResult?.summary || undefined,
+          durationMs,
+        });
+      }
+
+      if (code !== 0) {
+        const images = [...pendingImages];
+        pendingImages = [];
+        console.log(`[DONE]    Exit ${code}, ${durationMs}ms, ${images.length} image(s)`);
+        return res.status(500).json({
+          error: "execution_error",
+          message: stderrOut || `Process exited with code ${code}`,
+          text: textOut || null,
+          images,
+          diffs: diffResult?.diff || undefined,
+          diffSummary: diffResult?.summary || undefined,
+          exitCode: code,
+          durationMs,
+        });
+      }
+
       const images = [...pendingImages];
       pendingImages = [];
-      console.log(`[TIMEOUT] Killed PID ${child.pid} after ${durationMs}ms`);
-      return res.status(408).json({
-        error: "timeout",
-        message: `Command timed out after ${TIMEOUT}ms`,
-        text: textOut || null,
+      console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
+      res.json({
+        text: textOut,
         images,
+        diffs: diffResult?.diff || undefined,
+        diffSummary: diffResult?.summary || undefined,
+        exitCode: 0,
         durationMs,
       });
+    } finally {
+      busy = false;
+      activeChild = null;
     }
-
-    if (code !== 0) {
-      const images = [...pendingImages];
-      pendingImages = [];
-      console.log(`[DONE]    Exit ${code}, ${durationMs}ms, ${images.length} image(s)`);
-      return res.status(500).json({
-        error: "execution_error",
-        message: stderrOut || `Process exited with code ${code}`,
-        text: textOut || null,
-        images,
-        exitCode: code,
-        durationMs,
-      });
-    }
-
-    const images = [...pendingImages];
-    pendingImages = [];
-    console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
-    res.json({ text: textOut, images, exitCode: 0, durationMs });
   });
 });
 
