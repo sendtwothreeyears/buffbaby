@@ -329,7 +329,11 @@ function processQueue(from, state) {
   if (state.queue.length > 0) {
     const next = state.queue.shift();
     console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
-    processCommand(from, next, state);
+    processCommand(from, next, state).catch((err) => {
+      state.state = "idle";
+      state.queue.length = 0;
+      console.error(`[FATAL] ${from}: unhandled error in queued processCommand: ${err.message}`);
+    });
   } else {
     state.state = "idle";
   }
@@ -349,6 +353,10 @@ async function handleApprove(from, state) {
     });
     const data = await response.json();
 
+    if (!response.ok) {
+      throw new Error(data.message || data.error || `VM returned ${response.status}`);
+    }
+
     if (data.prUrl) {
       await sendMessage(from, `PR created: ${data.prUrl}`);
     } else {
@@ -366,7 +374,7 @@ async function handleApprove(from, state) {
     return;
   }
 
-  state.state = "idle";
+  // State stays "working" — processQueue sets "idle" if queue is empty
   processQueue(from, state);
 }
 
