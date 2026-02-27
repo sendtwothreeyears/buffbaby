@@ -1,12 +1,12 @@
 ---
 name: utilities:condense-docs
-description: Condense brainstorms and plans for specified phases into summaries, archive the originals. Use when you want to compress completed phase documentation while preserving the full originals.
+description: Condense documents for specified phases into a single summary file per directory, archive the originals. Use when you want to compress completed phase documentation while preserving the full originals.
 argument-hint: "[phase range] [dir1, dir2, ...] — e.g. '1-8 [docs/plans, docs/brainstorms]'"
 ---
 
 # Condense Phase Documentation
 
-Replace documents for completed phases with condensed summaries, archiving the full originals for reference.
+Replace all documents for completed phases with **one summary file per directory**, archiving the full originals for reference.
 
 ## Arguments
 
@@ -29,13 +29,13 @@ Replace documents for completed phases with condensed summaries, archiving the f
 
 For the specified phases and directories, this skill:
 1. Finds all documents in the specified directories associated with those phases
-2. Reads each document and generates a condensed summary
-3. Moves the original to `archive/<directory-name>/` (mirroring the source structure)
-4. Writes the condensed summary in place of the original
+2. Reads every document and synthesizes a **single summary file per directory**
+3. Moves all originals to `archive/<directory-name>/`
+4. Writes one summary file in each source directory (replacing all the individual files)
 
 ## Execution Flow
 
-### Phase 1: Parse Arguments
+### Step 1: Parse Arguments
 
 **Parse the phase range** into a list of phase numbers. Support formats:
 - Range: `1-8` (phases 1 through 8)
@@ -45,7 +45,7 @@ For the specified phases and directories, this skill:
 
 **Parse document locations** from the bracket-delimited list. If absent, use defaults (`docs/brainstorms`, `docs/plans`).
 
-### Phase 2: Inventory Documents
+### Step 2: Inventory Documents
 
 Scan each specified directory (and its subdirectories) for documents related to the specified phases.
 
@@ -58,130 +58,90 @@ Scan each specified directory (and its subdirectories) for documents related to 
 Present the inventory to the user for confirmation before proceeding:
 > "I found N documents across M directories for phases X-Y. Here's what I'll condense: [list by directory]. Proceed?"
 
-### Phase 3: Create Archive Directories
+### Step 3: Create Archive Directories
 
-Mirror the source directory structure under `archive/`. For each source directory, create the corresponding archive path:
+Mirror the source directory structure under `archive/`:
 
 ```
-archive/<dir-name>/          # e.g., archive/brainstorms/, archive/plans/, archive/phases/
-archive/<dir-name>/<subdir>/ # e.g., archive/plans/phases/ (if subdirs exist)
+archive/<dir-name>/          # e.g., archive/brainstorms/, archive/plans/
+archive/<dir-name>/<subdir>/ # if subdirs exist
 ```
 
-Create these directories if they don't exist.
+### Step 4: Read All Documents
 
-### Phase 4: Condense Each Document
+Read every document across all directories. Group by directory.
 
-Process documents in parallel where possible (use Task tool with multiple agents).
+### Step 5: Generate One Summary Per Directory
 
-**For each document:**
+For each directory, produce **one markdown file** that covers all phases in the range.
 
-1. **Read** the full original
-2. **Generate** a condensed summary using the format below
-3. **Move** the original to the corresponding archive path (preserve filename)
-4. **Write** the condensed summary to the original path in `docs/`
+**Output filename:** `phases-<range>-<dir-name>.md` (e.g., `phases-1-8-brainstorms.md`, `phases-1-8-plans.md`)
 
-### Condensed Format
-
-Choose the format based on the document type (detected from directory name or content):
-
-#### Brainstorm Documents (directories containing "brainstorm")
+**Summary format:**
 
 ```markdown
 ---
-date: [original date]
-topic: [original topic]
-phase: [phase number]
+phases: <range>
 condensed: true
-original: archive/<dir-name>/[original-filename].md
+originals: archive/<dir-name>/
 ---
 
-# Phase N: [Title] (Condensed)
+# Phases N–M: <Dir Type> Summary
 
-## Summary
+[1-2 sentence overview of what this collection covers]
 
-[2-3 sentence summary of what was explored and why]
-
-## Key Decisions
-
-- **[Decision 1]**: [What was decided and why, in one line]
-- **[Decision 2]**: [What was decided and why, in one line]
-- ...
-
-## Outcomes
-
-- [Key outcome or conclusion, one line each]
-- ...
-
-## Status
-
-[Completed / Implemented in Phase N / Superseded by X]
-```
-
-#### Plan / Phase Documents (directories containing "plan" or "phase")
-
-```markdown
----
-phase: [phase number]
-condensed: true
-original: archive/<dir-name>/[original-filename].md
 ---
 
-# Phase N: [Title] (Condensed)
+## Phase X: [Title]
 
-**Stage:** [Local Development / Production / etc.]
-**Depends on:** [Dependencies]
-**Done when:** [Completion criteria, one line]
+[Dense paragraph summarizing the phase: what was built/explored, key decisions, key outcomes. 3-8 sentences. Include specific technical details — names, numbers, patterns — not vague summaries.]
 
-## Summary
+## Phase Y: [Title]
 
-[2-3 sentence summary of what was built and the approach taken]
+[Same format...]
 
-## Key Deliverables
+---
 
-- [Deliverable 1]
-- [Deliverable 2]
-- ...
+## General: [Topic] (if non-phase docs exist)
 
-## Key Technical Decisions
-
-- **[Decision 1]**: [What was chosen and the 1-line rationale]
-- **[Decision 2]**: [What was chosen and the 1-line rationale]
-- ...
-
-## Status
-
-[Completed / In Progress / Planned]
+[Same dense paragraph format for docs not tied to a specific phase]
 ```
 
-#### Generic Documents (any other directory)
+**Writing guidelines:**
+- **Dense paragraphs, not bullet lists.** Each phase gets one paragraph with the essential technical details packed in.
+- **Preserve specifics.** Include port numbers, file names, LOC counts, env var names, dependency choices, and rationale. A future reader should understand *what was decided and why* without reading the original.
+- **Order by phase number.** Group non-phase docs at the end under "General."
+- **One file replaces many.** All individual files in that directory are deleted after the summary is written.
 
-Use the Plan format above, adapting section headers as appropriate for the content.
+### Step 6: Move Originals and Clean Up
 
-### Phase 5: Update Cross-References
+For each directory:
+1. Move all original files to `archive/<dir-name>/` (preserve filenames)
+2. Delete the individual files from the source directory
+3. The only file remaining in each source directory is the summary
 
-After condensation, check if any remaining docs reference the moved files. Update paths to note that condensed versions are in place and originals are in `archive/`.
+### Step 7: Update Cross-References
 
-**Do NOT update:** Any overview/index files (e.g., `00-overview.md`) — these should remain as-is.
+Check if any remaining docs reference the moved files. Update paths to note that condensed versions are in place and originals are in `archive/`.
 
-### Phase 6: Summary Report
+**Do NOT update:** Any overview/index files (e.g., `00-overview.md`).
 
-Present a summary:
+### Step 8: Summary Report
 
 ```
-Condensed N documents across M directories for phases X-Y.
+Condensed N documents into M summary files for phases X-Y.
 
 Per directory:
-  <dir1>: A files condensed, archived to archive/<dir1>/
-  <dir2>: B files condensed, archived to archive/<dir2>/
-  ...
+  <dir1>: A files → phases-X-Y-<dir1>.md (archived to archive/<dir1>/)
+  <dir2>: B files → phases-X-Y-<dir2>.md (archived to archive/<dir2>/)
 
-Total: N files condensed, N originals archived.
+Total: N originals archived, M summary files created.
 ```
 
 ## Guardrails
 
 - **Always confirm** the document inventory with the user before making changes
 - **Never delete** originals — always archive them
-- **Preserve filenames** — condensed files keep the same name at the same path
-- **Skip already-condensed** files (check for `condensed: true` in frontmatter)
-- **Keep the phases/00-overview.md** untouched — it's the master index
+- **One summary per directory** — not one per file
+- **Skip already-condensed** directories (check for existing `phases-*` summary with `condensed: true`)
+- **Keep overview/index files** untouched (e.g., `00-overview.md`)

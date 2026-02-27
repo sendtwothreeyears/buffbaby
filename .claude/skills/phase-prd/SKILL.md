@@ -111,12 +111,12 @@ This prevents scope creep during early phases and gives you a ready-made backlog
 
 ## Phase 6: Output the Phase Plan
 
-Write the plan to `docs/plans/phases/` in the current working directory. Create one file per phase, plus an overview file.
+Write the plan to `docs/phases/` in the current working directory. Create one file per phase, plus an overview file.
 
 ### Folder Structure
 
 ```
-docs/plans/phases/
+docs/phases/
 ├── 00-overview.md          # Full plan summary + deferred work
 ├── 01-phase-[name].md      # Phase 1
 ├── 02-phase-[name].md      # Phase 2
@@ -194,7 +194,7 @@ For each task, follow the workflow loop. Skip brainstorm for tasks with obvious 
 
 ### Writing the Files
 
-1. Create the `docs/plans/phases/` directory if it doesn't exist
+1. Create the `docs/phases/` directory if it doesn't exist
 2. Write `00-overview.md` first
 3. Write each phase file in order
 4. Report the full list of created files to the user when done
