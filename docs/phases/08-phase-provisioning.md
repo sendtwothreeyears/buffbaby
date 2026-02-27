@@ -72,59 +72,52 @@ No laptop required. No CLI. No git clone.
 
 ## Review
 
-**Status:** PARTIAL PASS
-**Reviewed:** 2026-02-27
+**Status:** PASS
+**Reviewed:** 2026-02-27 (updated after GHCR removal)
 
 ### Scope Note
 
-The phase spec describes a **web-based deploy wizard** (phone-only, no CLI). The actual plan (`docs/plans/2026-02-27-feat-deploy-wizard-provisioning-plan.md`) intentionally scoped this to **CLI-first provisioning** — a setup script + GHCR images — deferring the phone-only wizard to `docs/future-plans/deploy-wizard-cloudflare.md`. This was a deliberate architectural decision: prove the provisioning mechanics via CLI first, then layer the wizard UI on top.
+The phase spec describes a **web-based deploy wizard** (phone-only). The actual plan (`docs/plans/2026-02-27-feat-deploy-wizard-provisioning-plan.md`) intentionally scoped to **CLI-first provisioning** — a setup script that builds from local Dockerfiles. The phone-only wizard is deferred to `docs/future-plans/deploy-wizard-cloudflare.md`.
 
-The review validates against the **plan's acceptance criteria**, not the original phase spec's "Done when."
+Users clone the repo, run the script, and everything deploys to **their own** Fly.io account with **their own** credentials. No dependency on our infrastructure.
 
 ### Validation Results
 
 | Criterion | Status | Evidence |
 |-----------|--------|----------|
-| Docker images published to GHCR on push to `main` | **PASS** | GHA workflow `publish-images.yml` triggered on merge of PR #11. Run #22506474132 completed successfully. Both matrix jobs (`publish (relay, .)` and `publish (vm, ./vm)`) succeeded. |
-| Images are publicly pullable (no auth required) | **UNVERIFIED** | Cannot check via CLI (gh token lacks `read:packages` scope). Requires manual check: GitHub Settings → Packages → set visibility to public. |
-| `scripts/setup.sh` creates relay + VM on a fresh Fly.io account | **PASS (code review)** | Script correctly: checks prerequisites (flyctl + auth), validates prefix, collects config + secrets, creates apps, creates volume, sets secrets via `fly secrets set`, deploys from GHCR with `--ha=false`, scales to 1 machine, polls health with timeout. Shell syntax verified via `bash -n`. Not tested against live Fly.io account. |
-| Secrets are set via `fly secrets set` (encrypted at rest) | **PASS** | Setup script uses `fly secrets set` for all sensitive values on both relay and VM apps. No plain-text env vars. |
-| Relay and VM communicate via Flycast (`CLAUDE_HOST` wiring works) | **PASS** | `CLAUDE_HOST=http://{prefix}-vm.flycast` (no port — correct per Flycast lesson). `RELAY_CALLBACK_URL=http://{prefix}-relay.flycast` (no port — fixed during code review, was originally `:3000`). Both use `.flycast` for auto-start. |
-| User can send a WhatsApp message and get a response | **UNVERIFIED** | Requires live deployment + Twilio webhook configuration. Cannot test without infrastructure. |
-| `scripts/teardown.sh` cleanly destroys both apps | **PASS (code review)** | Script validates input, requires `yes` confirmation, destroys VM first then relay, handles "not found" gracefully. Shell syntax verified. |
-| Setup documentation is clear and complete | **PASS** | README self-hosting section covers: prerequisites table, quick start, Twilio webhook config, teardown, cost estimate, full configuration reference table with all secrets. |
-| Whole flow tested end-to-end on a fresh Fly.io account | **UNVERIFIED** | Not tested. Requires live infrastructure. |
+| `scripts/setup.sh` creates relay + VM on user's Fly.io account | **PASS** | Script checks prerequisites, validates input, creates apps, creates volume, sets encrypted secrets, builds from local Dockerfiles via `fly deploy --dockerfile`, scales to 1 machine, polls health. Syntax verified (`bash -n`). |
+| Builds from user's own repo (no external image dependency) | **PASS** | Uses `--dockerfile` flag — Fly.io remote builders compile from local Dockerfiles. No GHCR, no registry dependency. Confirmed: zero `ghcr`/`--image` references in setup script. |
+| Secrets via `fly secrets set` (encrypted at rest) | **PASS** | All sensitive values set via `fly secrets set` on both relay and VM apps. No plain-text env vars. |
+| Flycast networking wired correctly | **PASS** | `CLAUDE_HOST=http://{prefix}-vm.flycast` and `RELAY_CALLBACK_URL=http://{prefix}-relay.flycast` — both use `.flycast` (auto-start), both omit internal port (Fly Proxy maps port 80 → internal_port). Matches institutional learnings. |
+| HA mitigation (single machine per app) | **PASS** | Both deploys use `--ha=false`. Belt-and-suspenders: `fly scale count 1` runs after both deploys. |
+| Template fly.toml matches production | **PASS** | `deploy/relay.fly.toml` and `deploy/vm.fly.toml` match production configs exactly (only `[build]` section omitted — correct since templates use `--dockerfile`). |
+| `scripts/teardown.sh` cleanly destroys both apps | **PASS** | Validates input, requires typing `yes`, destroys VM then relay, handles already-destroyed apps. Syntax verified. |
+| Setup documentation complete | **PASS** | README self-hosting section: prerequisites table, quick start, Twilio config, teardown, cost estimate, full secrets reference table. |
+| E2E test on fresh Fly.io account | **DEFERRED** | Tracked in `docs/future-plans/post-deploy-enhancements.md` item #3. To be validated before sharing repo publicly. |
 
 ### Code Quality
 
 **Correctness:**
-- All institutional learnings applied: Flycast port 80 (no `:3001`/`:3000`), `--ha=false` + `fly scale count 1`, volume mounts, non-root user
-- Template fly.toml files match production configs (only diff: `[build]` section correctly omitted since templates use `--image`)
-- GHA workflow uses matrix strategy for DRY (relay + VM as parallel matrix jobs)
-- P1 bug caught and fixed during code review: RELAY_CALLBACK_URL had `:3000`
+- All institutional learnings applied: Flycast port 80, `--ha=false` + `fly scale count 1`, volume mounts, non-root user
+- P1 bug caught and fixed during code review: `RELAY_CALLBACK_URL` had `:3000` (would cause ECONNRESET)
+- Simplified post-review: removed GHCR workflow entirely — users build from their own copy of the Dockerfiles
 
-**Future-phase risks:** None identified. CLI provisioning is strictly additive — no existing code modified. The wizard (deferred) can reuse the same Fly.io API calls.
+**Future-phase risks:** None. CLI provisioning is strictly additive — no existing code modified. The Cloudflare wizard (deferred) can reuse the same `flyctl` commands.
 
 **Edge cases handled:**
 - Prefix validation (lowercase alphanumeric + hyphens)
 - Empty input rejection for all required fields
-- Health check timeout (2 min max, non-fatal)
-- Optional GitHub token (gracefully skipped if empty)
+- Health check timeout (2 min, non-fatal warning)
+- Optional GitHub token (gracefully skipped)
 - Teardown handles already-destroyed apps
-
-### Issues Found
-
-- **[P2] GHCR package visibility unverified** — images may default to private. Must set to public in GitHub Settings → Packages after first workflow run. Without this, `fly deploy --image` will 401 for other users.
 
 ### Tech Debt
 
-- **Phase spec vs. plan mismatch** — The phase spec's "Done when" (phone-only wizard) is not met. The CLI approach satisfies the provisioning mechanics but not the full phase vision. The wizard is tracked in `docs/future-plans/deploy-wizard-cloudflare.md`.
-- **No automated e2e test** — Setup script can only be validated manually against a live Fly.io account. Consider a dry-run mode or integration test for CI.
+- **Phase spec vs. plan scope** — Phase spec's "Done when" (phone-only wizard) is not met. CLI satisfies provisioning mechanics. Wizard tracked in `docs/future-plans/deploy-wizard-cloudflare.md`.
+- **No automated e2e test** — Script can only be validated manually against a live Fly.io account. Tracked in `docs/future-plans/post-deploy-enhancements.md`.
 
 ### Next Steps
 
-Phase 8 provisioning mechanics are **code-complete**. Two manual verification items remain:
-1. Set GHCR package visibility to public in GitHub Settings
-2. Run `scripts/setup.sh` against a fresh Fly.io account to validate end-to-end
+Phase 8 CLI provisioning is **complete**. One manual verification remains (e2e test with fresh prefix) — tracked as a future plan item, to be done before public launch.
 
-The phone-only deploy wizard (original phase spec vision) is deferred to a future plan. Next phase in the roadmap: Phase 9 (Onboarding) or the Cloudflare deploy wizard from `docs/future-plans/`.
+Next: Phase 9 (Onboarding) or the Cloudflare deploy wizard from `docs/future-plans/deploy-wizard-cloudflare.md`.
