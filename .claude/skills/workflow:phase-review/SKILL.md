@@ -10,8 +10,8 @@ Review a completed development phase against its plan. Validate that deliverable
 
 ## Phase 1: Identify the Phase to Review
 
-1. Look for a `docs/plans/phases/` directory in the current working directory
-2. If no `docs/plans/phases/` directory exists, ask the user where their phase files are
+1. Look for a `docs/phases/` directory in the current working directory
+2. If no `docs/phases/` directory exists, ask the user where their phase files are
 3. Read `00-overview.md` to understand the full plan context
 4. **Auto-detect the current phase:** Scan phase files in order. The first file without a `## Review` section (or with a failed review) is the phase to review.
 5. If all phases have passing reviews, tell the user — the plan is complete.

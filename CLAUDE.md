@@ -19,7 +19,7 @@ Three components:
 2. **Cloud VM** (`vm/`) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
 3. **Twilio** — WhatsApp transport. Webhooks inbound, API outbound. WhatsApp via Twilio Sandbox (dev) or Business number (prod).
 
-**Phase plan:** `docs/plans/phases/00-overview.md` — sequenced development phases.
+**Phase plan:** `docs/phases/00-overview.md` — sequenced development phases.
 
 ## Key Files
 
