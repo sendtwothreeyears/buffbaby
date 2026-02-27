@@ -5,7 +5,6 @@ const twilio = require("twilio");
 const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
-  TWILIO_PHONE_NUMBER,
   TWILIO_WHATSAPP_NUMBER,
   PUBLIC_URL,
   ALLOWED_PHONE_NUMBERS,
@@ -17,7 +16,7 @@ const {
 const required = [
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
-  "TWILIO_PHONE_NUMBER",
+  "TWILIO_WHATSAPP_NUMBER",
   "PUBLIC_URL",
   "ALLOWED_PHONE_NUMBERS",
 ];
@@ -37,7 +36,6 @@ app.use(express.urlencoded({ extended: false }));
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
 const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
-const MAX_MMS_MEDIA = 10; // Twilio limit: 10 media URLs per MMS
 
 // --- Per-user state ---
 const userState = new Map(); // Map<phone, { busy: boolean, queue: string[] }>
@@ -83,20 +81,14 @@ app.get("/images/:filename", async (req, res) => {
 
 // --- Twilio webhook signature validation ---
 const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
-  url: PUBLIC_URL + "/sms",
+  url: PUBLIC_URL + "/webhook",
 });
 
-// --- Core SMS/WhatsApp handler ---
-app.post("/sms", webhookValidator, async (req, res) => {
+// --- Core WhatsApp handler ---
+app.post("/webhook", webhookValidator, async (req, res) => {
   const from = req.body.From;
   const phone = from.replace(/^whatsapp:/, "");
   const body = (req.body.Body || "").trim();
-
-  // Reject WhatsApp if not configured
-  if (from.startsWith("whatsapp:") && !TWILIO_WHATSAPP_NUMBER) {
-    console.log(`[BLOCKED] WhatsApp not configured: ${phone}`);
-    return res.sendStatus(200);
-  }
 
   // Phone allowlist (strip whatsapp: prefix for check)
   if (!allowlist.has(phone)) {
@@ -109,7 +101,7 @@ app.post("/sms", webhookValidator, async (req, res) => {
 
   console.log(`[INBOUND] ${from}: ${body.substring(0, 80)}`);
 
-  // MMS check (text-only for Phase 3) — before empty-body check so
+  // Media check (text-only for Phase 3) — before empty-body check so
   // image-only messages get the right error ("text only" not "empty")
   if (parseInt(req.body.NumMedia || "0", 10) > 0) {
     return sendMessage(from, "I can only process text messages for now.");
@@ -152,14 +144,12 @@ async function processCommand(from, text, state) {
       const data = await forwardToVM(current);
 
       // Construct public media URLs from images array
-      const mediaUrls = (data.images || [])
-        .slice(0, MAX_MMS_MEDIA)
-        .map((img) => `${PUBLIC_URL}${img.url}`);
+      const mediaUrls = (data.images || []).map((img) => `${PUBLIC_URL}${img.url}`);
 
       if (data.text) {
         const response =
-          data.text.length > 1500
-            ? data.text.substring(0, 1500) + "\n\n[Response truncated]"
+          data.text.length > 4096
+            ? data.text.substring(0, 4096) + "\n\n[Response truncated]"
             : data.text;
         console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
         await sendMessage(from, response, mediaUrls);
@@ -227,20 +217,30 @@ async function forwardToVM(text) {
   }
 }
 
-// --- Outbound SMS/MMS/WhatsApp helper ---
+// --- Outbound WhatsApp helper ---
 async function sendMessage(to, body, mediaUrls = []) {
   try {
-    const isWhatsApp = to.startsWith("whatsapp:");
-    const fromAddr = isWhatsApp
-      ? `whatsapp:${TWILIO_WHATSAPP_NUMBER}`
-      : TWILIO_PHONE_NUMBER;
-    const params = { to, from: fromAddr, body };
+    const params = {
+      to,
+      from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+      body,
+    };
     if (mediaUrls.length > 0) {
-      params.mediaUrl = mediaUrls;
+      // WhatsApp: 1 media per message — send first image with text, rest as separate messages
+      params.mediaUrl = [mediaUrls[0]];
+      await client.messages.create(params);
+      for (const url of mediaUrls.slice(1)) {
+        await client.messages.create({
+          to,
+          from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+          mediaUrl: [url],
+        });
+      }
+    } else {
+      await client.messages.create(params);
     }
-    await client.messages.create(params);
     if (mediaUrls.length > 0) {
-      console.log(`[MMS] ${to}: ${mediaUrls.length} image(s)`);
+      console.log(`[MEDIA] ${to}: ${mediaUrls.length} image(s)`);
     }
     console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
   } catch (err) {
@@ -252,7 +252,7 @@ async function sendMessage(to, body, mediaUrls = []) {
 app.listen(PORT, () => {
   console.log(`[STARTUP] Relay listening on port ${PORT}`);
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
-  console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/sms`);
+  console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/webhook`);
   console.log(`[STARTUP] Allowlist: ${[...allowlist].join(", ")}`);
-  console.log(`[STARTUP] WhatsApp: ${TWILIO_WHATSAPP_NUMBER ? `enabled (${TWILIO_WHATSAPP_NUMBER})` : "disabled"}`);
+  console.log(`[STARTUP] WhatsApp: ${TWILIO_WHATSAPP_NUMBER}`);
 });
