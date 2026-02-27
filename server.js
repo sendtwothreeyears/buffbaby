@@ -496,31 +496,53 @@ async function forwardToVM(text, from, state) {
 }
 
 // --- Outbound WhatsApp helper ---
+const MAX_CHUNK = 1600; // Twilio WhatsApp sandbox limit
+
 async function sendMessage(to, body, mediaUrls = []) {
   try {
-    const params = {
+    // Split long messages into chunks
+    const chunks = [];
+    for (let i = 0; i < body.length; i += MAX_CHUNK) {
+      chunks.push(body.substring(i, i + MAX_CHUNK));
+    }
+
+    // First chunk gets the first media attachment (if any)
+    const firstParams = {
       to,
       from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
-      body,
+      body: chunks[0],
     };
     if (mediaUrls.length > 0) {
-      // WhatsApp: 1 media per message — send first image with text, rest as separate messages
-      params.mediaUrl = [mediaUrls[0]];
-      await client.messages.create(params);
-      for (const url of mediaUrls.slice(1)) {
-        await client.messages.create({
-          to,
-          from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
-          mediaUrl: [url],
-        });
-      }
-    } else {
-      await client.messages.create(params);
+      firstParams.mediaUrl = [mediaUrls[0]];
     }
+    await client.messages.create(firstParams);
+
+    // Remaining text chunks
+    for (const chunk of chunks.slice(1)) {
+      await client.messages.create({
+        to,
+        from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+        body: chunk,
+      });
+    }
+
+    // Remaining media (1 per message)
+    for (const url of mediaUrls.slice(1)) {
+      await client.messages.create({
+        to,
+        from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+        mediaUrl: [url],
+      });
+    }
+
     if (mediaUrls.length > 0) {
       console.log(`[MEDIA] ${to}: ${mediaUrls.length} image(s)`);
     }
-    console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
+    if (chunks.length > 1) {
+      console.log(`[OUTBOUND] ${to}: ${body.length} chars in ${chunks.length} chunks`);
+    } else {
+      console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
+    }
   } catch (err) {
     console.error(`[OUTBOUND_ERROR] ${to}: ${err.message}`);
   }
