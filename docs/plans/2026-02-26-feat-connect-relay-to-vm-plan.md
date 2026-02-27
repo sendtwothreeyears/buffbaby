@@ -38,7 +38,7 @@ Replace the echo handler with an async forwarding pipeline:
 
 ### Webhook Signature Validation (server.js)
 
-Add `twilio.webhook()` Express middleware on the `/sms` route. Must configure the `url` option with `PUBLIC_URL + '/sms'` to handle the ngrok proxy — Express sees `localhost:3000` but Twilio signs against the ngrok URL.
+Add `twilio.webhook()` Express middleware on the `/webhook` route. Must configure the `url` option with `PUBLIC_URL + '/webhook'` to handle the ngrok proxy — Express sees `localhost:3000` but Twilio signs against the ngrok URL.
 
 ### Message Queue (server.js, ~30 LOC)
 
@@ -91,7 +91,7 @@ The VM returns different HTTP status codes. The relay must map each to a user-fr
 
 ### Response Truncation
 
-Claude can produce multi-kilobyte responses. WhatsApp supports up to 4096 chars per message. Truncate at **1500 chars** with suffix: `\n\n[Response truncated]`
+Claude can produce multi-kilobyte responses. WhatsApp supports up to 4096 chars per message. Truncate at **4096 chars** with suffix: `\n\n[Response truncated]`
 
 Full pagination (`Reply 'more'`) is deferred to Phase 16 (UX Polish).
 
@@ -105,7 +105,7 @@ The idle shutdown and message queue interact: the VM may shut down between proce
 
 ### Twilio Webhook Validation Behind ngrok
 
-The `twilio.webhook()` middleware validates using the request URL. Behind ngrok, Express sees `http://localhost:3000/sms` but Twilio signed against `https://abc123.ngrok.io/sms`. Fix: pass `{ url: process.env.PUBLIC_URL + '/sms' }` to the middleware.
+The `twilio.webhook()` middleware validates using the request URL. Behind ngrok, Express sees `http://localhost:3000/webhook` but Twilio signed against `https://abc123.ngrok.io/webhook`. Fix: pass `{ url: process.env.PUBLIC_URL + '/webhook' }` to the middleware.
 
 ### Inbound Media / Empty Messages
 
@@ -127,7 +127,7 @@ The VM response shape already includes `images[]` — relay ignores it for now, 
 - [x] Text "what is 2+2" → receive Claude's answer as WhatsApp message
 - [x] Text while Claude is busy → receive "Got it, I'll process this next" and message processes after current command
 - [x] Send 6th message while busy → receive "Queue full" message
-- [x] Forged HTTP POST to `/sms` (no valid Twilio signature) → rejected with 403
+- [x] Forged HTTP POST to `/webhook` (no valid Twilio signature) → rejected with 403
 - [x] VM returns 408 timeout → user receives friendly error message
 - [x] VM is down (idle shutdown) → relay retries once after delay, user gets response or error
 - [x] VM idle for 30 min → container exits, Docker restarts it on next request
@@ -177,14 +177,14 @@ function getState(phone) {
 
 // --- Twilio webhook signature validation ---
 const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
-  url: PUBLIC_URL + "/sms",
+  url: PUBLIC_URL + "/webhook",
 });
 
 // --- Health endpoint (unchanged) ---
 app.get("/health", (req, res) => res.json({ status: "ok", service: "textslash-relay" }));
 
 // --- Core message handler ---
-app.post("/sms", webhookValidator, async (req, res) => {
+app.post("/webhook", webhookValidator, async (req, res) => {
   const from = req.body.From;
   const body = (req.body.Body || "").trim();
 
@@ -371,7 +371,7 @@ Five steps, ordered by dependency:
 ### 1. Upgrade server.js — relay forwarding + queue (~150-200 LOC total)
 
 Replace the echo server with the full forwarding pipeline in one pass:
-- Add `twilio.webhook()` middleware with `{ url: PUBLIC_URL + '/sms' }` (P0 security)
+- Add `twilio.webhook()` middleware with `{ url: PUBLIC_URL + '/webhook' }` (P0 security)
 - Replace echo handler with async forwarding: immediate `200 OK`, POST to `CLAUDE_HOST/command` via `fetch` with `AbortController` timeout (330s = `COMMAND_TIMEOUT_MS` + 30s buffer), send response via Twilio REST API
 - Add per-user state `Map<phone, { busy, queue[] }>` with 5-message cap, ack message, dequeue loop
 - Map VM status codes (400, 408, 500) to user-friendly messages; handle empty body, media, truncation (>1500 chars)
@@ -400,7 +400,7 @@ Two surgical additions:
 
 - Text "what is 2+2" → verify Claude answers via WhatsApp
 - Text while Claude is busy → verify queue ack and dequeue processing
-- Forge an HTTP POST to `/sms` without Twilio signature → verify 403 rejection
+- Forge an HTTP POST to `/webhook` without Twilio signature → verify 403 rejection
 - Let VM idle for >30 min (or temporarily lower `IDLE_TIMEOUT_MS`) → verify shutdown and auto-restart
 
 ## Dependencies & Risks

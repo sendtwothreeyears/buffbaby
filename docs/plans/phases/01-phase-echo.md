@@ -28,7 +28,7 @@ These are manual setup steps done in the Twilio console and terminal, not shippa
 
 - [ ] Build a Node.js relay server that echoes incoming WhatsApp messages back and sends a static test image via WhatsApp
   - Plan: `/workflow:plan Twilio WhatsApp echo server with ngrok — receive WhatsApp message, echo back, send test WhatsApp media image`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-sms-echo-plan.md`
+  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-echo-server-plan.md`
 
 ## Notes
 

@@ -26,12 +26,12 @@ Every subsequent phase depends on this pipeline working.
 
 ## Proposed Solution
 
-A single-file Express server with one webhook endpoint (`POST /sms`) and one static route (`GET /test-image.png`). No framework beyond Express. No database. No auth beyond a phone number allowlist. Uses Twilio's WhatsApp Sandbox (dev) or Business API (prod).
+A single-file Express server with one webhook endpoint (`POST /webhook`) and one static route (`GET /test-image.png`). No framework beyond Express. No database. No auth beyond a phone number allowlist. Uses Twilio's WhatsApp Sandbox (dev) or Business API (prod).
 
 ### Architecture
 
 ```
-Phone (WhatsApp) -> Twilio -> ngrok -> localhost:3000/sms -> Echo message + media -> Twilio -> Phone (WhatsApp)
+Phone (WhatsApp) -> Twilio -> ngrok -> localhost:3000/webhook -> Echo message + media -> Twilio -> Phone (WhatsApp)
 ```
 
 ### Key Decisions
@@ -110,7 +110,7 @@ PORT=3000
 
 Single-file Express server. Responsibilities:
 
-1. **`POST /sms`** — Twilio webhook handler
+1. **`POST /webhook`** — Twilio webhook handler
    - Parse `req.body.From` and `req.body.Body` (Twilio sends URL-encoded form data)
    - Check `From` against `ALLOWED_PHONE_NUMBERS` — if not listed, log warning and return 200 (silent drop)
    - If allowed: send echo message + test image via Twilio REST API (WhatsApp)
@@ -128,7 +128,7 @@ Single-file Express server. Responsibilities:
 // Load .env, require express + twilio
 // Parse ALLOWED_PHONE_NUMBERS into a Set
 
-// POST /sms handler:
+// POST /webhook handler:
 //   Log: "[INBOUND] From: ${from}, Body: ${body}"
 //   If from not in allowlist → log warning, return 200
 //   Create Twilio client, send message:
@@ -154,7 +154,7 @@ After setup:
 
 1. Start ngrok: `ngrok http 3000`
 2. Copy the ngrok URL to `.env` as `NGROK_URL`
-3. Configure Twilio webhook: set the phone number's "A message comes in" webhook to `{NGROK_URL}/sms` (HTTP POST)
+3. Configure Twilio webhook: set the phone number's "A message comes in" webhook to `{NGROK_URL}/webhook` (HTTP POST)
 4. Start the server: `npm start`
 5. Text the Twilio number from your phone
 6. Confirm: echo message received + test image received via WhatsApp

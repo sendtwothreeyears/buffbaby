@@ -109,7 +109,7 @@ The `/chat` endpoint has no authentication. It's a dev tool for local use only. 
 - [x] Error responses (timeout, VM busy, VM down) display meaningful messages
 - [x] Partial results (text/images captured before failure) render with an error indicator
 - [x] Chat works over ngrok from a phone on any network
-- [x] Existing WhatsApp/Twilio endpoints (`POST /sms`, `GET /images/:filename`) are unchanged
+- [x] Existing WhatsApp/Twilio endpoints (`POST /webhook`, `GET /images/:filename`) are unchanged
 - [x] No new npm dependencies added
 
 ## Chat UI Specification

@@ -498,7 +498,7 @@ Create `.claude/skills/setup/SKILL.md` — an AI-native installer that walks dev
    - Update `PUBLIC_URL` in `.env`
 7. **Configure Twilio webhook:**
    - Guide to Twilio console → Phone Number → Messaging → Webhook URL
-   - Or configure WhatsApp Sandbox webhook URL in Twilio Console to point to `<ngrok-url>/sms`
+   - Or configure WhatsApp Sandbox webhook URL in Twilio Console to point to `<ngrok-url>/webhook`
 8. **Verify end-to-end:**
    - "Send a WhatsApp message to the Twilio sandbox number now"
    - Check relay logs for inbound message

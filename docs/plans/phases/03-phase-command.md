@@ -48,7 +48,7 @@ Deliverables:
 | Text "what is 2+2", get answer back via WhatsApp | PASS | Relay forwards to VM `/command`, Claude Code responds, relay sends WhatsApp message. User confirmed working via live test during ship. |
 | Relay forwards WhatsApp message to VM `/command` | PASS | `server.js:191` — `fetch(CLAUDE_HOST/command)` with JSON body `{ text }` |
 | Async webhook pattern (immediate 200 OK) | PASS | `server.js:100` — `res.sendStatus(200)` before any async processing |
-| Twilio webhook signature validation | PASS | `server.js:84-86` — `twilio.webhook()` middleware on `/sms` route |
+| Twilio webhook signature validation | PASS | `server.js:84-86` — `twilio.webhook()` middleware on `/webhook` route |
 | Phone number allowlist | PASS | `server.js:94-97` — checks `allowlist.has(from)`, silently drops non-allowlisted |
 | Error handling (connection refused, 500, timeout) | PASS | `server.js:163-171` — maps error codes to user-friendly WhatsApp messages. Cold-start retry on ECONNREFUSED (`server.js:211-216`) |
 | Per-user queue (5-message cap) | PASS | `server.js:42` — `Map<phone, {busy, queue[]}>`. Cap at 5 (`server.js:118`). "Got it, I'll process this next" on queue. "Queue full" at cap. |

@@ -14,7 +14,7 @@ depends_on: "Phase 4.1 (Web Chat Dev Tool)"
 Add WhatsApp as the primary messaging channel using Twilio's WhatsApp Sandbox API. Twilio's WhatsApp webhooks use the same webhook format — the `From` field includes a `whatsapp:` prefix on phone numbers. This is a ~20-line change to `server.js`.
 
 ```
-WhatsApp: Phone → Twilio WA  → POST /sms → forwardToVM() → sendMessage() → Twilio WA  → Phone
+WhatsApp: Phone → Twilio WA  → POST /webhook → forwardToVM() → sendMessage() → Twilio WA  → Phone
 Web chat: Browser → POST /chat → forwardToVM() → JSON → Browser
 ```
 
@@ -26,7 +26,7 @@ WhatsApp via Twilio Sandbox is available immediately — no additional verificat
 
 ## Proposed Solution
 
-Detect WhatsApp messages from the `From` field in the existing `/sms` webhook handler. Route outbound messages with the correct `to`/`from` addressing. No new endpoints, no new files, no VM changes.
+Detect WhatsApp messages from the `From` field in the existing `/webhook` webhook handler. Route outbound messages with the correct `to`/`from` addressing. No new endpoints, no new files, no VM changes.
 
 ### Key Design Decision: Key `userState` by Raw `From`
 
@@ -36,7 +36,7 @@ The brainstorm proposed stripping the `whatsapp:` prefix and adding a `channel` 
 
 - Eliminates queue routing bugs entirely
 - Requires no changes to `getState()`, `processCommand()`, or queue logic
-- Reduces the change to just two functions: the `/sms` handler (allowlist check) and `sendMessage()`
+- Reduces the change to just two functions: the `/webhook` handler (allowlist check) and `sendMessage()`
 
 ### Changes to `server.js`
 
@@ -48,7 +48,7 @@ const { ..., TWILIO_WHATSAPP_NUMBER } = process.env;
 
 Not in the `required` array — WhatsApp is additive. Store bare number (`+14155238886`), code prepends `whatsapp:`.
 
-**2. `/sms` handler: strip prefix for allowlist, early-exit if WhatsApp not configured**
+**2. `/webhook` handler: strip prefix for allowlist, early-exit if WhatsApp not configured**
 
 ```javascript
 const from = req.body.From;
@@ -142,7 +142,7 @@ WhatsApp supports 4096 chars — current truncation may be relaxed in a future t
 ### server.js (~20 lines changed)
 
 - [x] Add `TWILIO_WHATSAPP_NUMBER` to env var destructuring
-- [x] Add WhatsApp-not-configured early-exit in `/sms` handler
+- [x] Add WhatsApp-not-configured early-exit in `/webhook` handler
 - [x] Strip `whatsapp:` prefix for allowlist check (use stripped `phone` for allowlist, raw `from` for everything else)
 - [x] Update `sendMessage()` to detect WhatsApp from `to` prefix and use correct `from` number
 - [x] Add WhatsApp status to startup logging
@@ -161,7 +161,7 @@ WhatsApp supports 4096 chars — current truncation may be relaxed in a future t
 
 **Dependencies:**
 - Twilio WhatsApp Sandbox must be activated in Twilio Console
-- Sandbox webhook URL must be pointed to relay's `/sms` endpoint
+- Sandbox webhook URL must be pointed to relay's `/webhook` endpoint
 - User must send join code to sandbox number to opt in
 
 **Risks:**
@@ -171,7 +171,7 @@ WhatsApp supports 4096 chars — current truncation may be relaxed in a future t
 ## References & Research
 
 ### Internal References
-- `server.js:121-168` — `/sms` webhook handler (allowlist, queue logic)
+- `server.js:121-168` — `/webhook` webhook handler (allowlist, queue logic)
 - `server.js:265-279` — `sendMessage()` (outbound Twilio API call)
 - `server.js:44-51` — `getState()` and `userState` Map
 - `server.js:115-118` — Twilio webhook signature validation

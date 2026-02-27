@@ -534,5 +534,5 @@ Or add to Dockerfile CMD as a background process. The test app only needs to run
 
 ### External
 
-- [Twilio WhatsApp mediaUrl docs](https://www.twilio.com/docs/messaging/guides/how-to-send-sms-messages-with-media)
+- [Twilio mediaUrl docs](https://www.twilio.com/docs/messaging/guides/how-to-send-sms-messages-with-media)
 - [Playwright screenshot API](https://playwright.dev/docs/api/class-page#page-screenshot)
