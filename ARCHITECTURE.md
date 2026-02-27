@@ -14,6 +14,8 @@ Express server that bridges Twilio WhatsApp with the backend VM.
 - **Authentication:** Phone number allowlist — only configured numbers get through (`whatsapp:` prefix stripped for allowlist check)
 - **Outbound:** Sends responses via Twilio API as WhatsApp messages (text + media)
 - **Image proxy:** `GET /images/:filename` proxies image requests from Twilio to the VM
+- **Callbacks:** `POST /callback/:phone` receives progress updates from VM during execution
+- **State machine:** Per-user state (`idle` → `working` → `awaiting_approval` → `idle`) with approval/reject/cancel keyword routing
 - **Queue:** Per-user message queue (max 5) with sequential processing
 
 ### Layer 2: Docker VM (`vm/`)
@@ -24,6 +26,8 @@ Always-on container running Claude Code headlessly via HTTP API.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/command` | POST | Run a prompt through Claude Code CLI |
+| `/approve` | POST | Create PR (approved) or revert changes (rejected) |
+| `/cancel` | POST | Kill the active Claude Code process |
 | `/screenshot` | POST | Capture a web page screenshot with Playwright |
 | `/health` | GET | Health check |
 | `/images/:filename` | GET | Serve generated images from `/tmp/images` |
@@ -65,6 +69,33 @@ Always-on container running Claude Code headlessly via HTTP API.
 7. Relay sends text response as WhatsApp message via Twilio
 ```
 
+### Progress Streaming (Phase 6)
+
+```
+1. User sends command via WhatsApp
+2. Relay sets state to "working", forwards to VM POST /command { text, callbackPhone }
+3. VM spawns Claude Code, pipes prompt via stdin
+4. Claude Code emits ::progress:: markers in stdout
+5. VM parses markers, POSTs to relay: POST /callback/:phone { type: "progress", message }
+6. Relay receives callback, sends progress message to WhatsApp
+7. Claude Code finishes (may emit ::approval:: marker)
+8. VM awaits pending callbacks, responds with { text, images, diffs, approvalRequired }
+```
+
+### Approval Flow (Phase 6)
+
+```
+1. VM response includes approvalRequired: true
+2. Relay transitions to "awaiting_approval", sends diffs + prompt to user
+3. User replies "approve" → Relay POSTs /approve { approved: true } to VM
+4. VM creates commit + PR via Claude Code, responds with PR URL
+5. Relay sends PR URL to WhatsApp, transitions to "idle"
+   — OR —
+3. User replies "reject" → Relay POSTs /approve { approved: false } to VM
+4. VM runs git checkout . && git clean -fd, responds
+5. Relay sends confirmation, transitions to "idle"
+```
+
 ### Screenshot Pipeline (Phase 4)
 
 ```
@@ -93,8 +124,37 @@ Always-on container running Claude Code headlessly via HTTP API.
 - **WhatsApp 1-media-per-message** — first image sent with text, additional images as separate messages
 - **Transport-agnostic `forwardToVM()`** — the VM API is channel-independent; only the relay's `sendMessage()` is WhatsApp-specific
 
+### State Machine
+
+```
+         ┌─────── user message ──────► WORKING
+         │                              │  │
+       IDLE ◄── normal completion ──────┘  │
+         │                                 │ approvalRequired
+         │    ┌── approve ─────────────────┤
+         │    │   (→ working → PR → idle)  │
+         │    │                            ▼
+         │    └──────────── AWAITING_APPROVAL
+         │                        │  │
+         │    reject ─────────────┘  │
+         │    (→ revert → idle)      │
+         │                           │
+         └── cancel / timeout ───────┘
+```
+
+| From | Trigger | To | Action |
+|------|---------|-----|--------|
+| `idle` | user message | `working` | Forward to VM |
+| `working` | VM responds (no approval) | `idle` | Send response, process queue |
+| `working` | VM responds (approvalRequired) | `awaiting_approval` | Send diffs + prompt, start 30-min timer |
+| `working` | "cancel" | `idle` | Abort fetch, POST /cancel to VM, clear queue |
+| `awaiting_approval` | "approve" | `working` → `idle` | POST /approve, send PR URL |
+| `awaiting_approval` | "reject" | `idle` | POST /approve {approved:false}, revert |
+| `awaiting_approval` | timeout (30 min) | `idle` | Changes preserved on disk |
+
 ## Known Limitations
 
 - **24-hour session window** — WhatsApp only allows replies within 24 hours of the user's last message. Proactive notifications (CI/CD alerts, stale session reminders) require Meta Business verification and approved template messages. This affects future Phases 14 and 15.
 - **Sandbox join code** — Users must send a join code to the Twilio Sandbox number before first use. Production will use a WhatsApp Business number which doesn't require this.
-- **In-memory message queue** — relay queue state is lost on restart; queued messages and busy flags reset.
+- **In-memory state** — relay state (queue, approval timers) is lost on restart; state resets to idle.
+- **No callback auth** — VM-to-relay callbacks are unauthenticated (localhost only for alpha). Planned for Phase 7.
