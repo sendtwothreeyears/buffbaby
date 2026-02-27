@@ -135,7 +135,7 @@ fly secrets set \
 echo "Setting VM secrets..."
 VM_SECRETS=(
   "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
-  "RELAY_CALLBACK_URL=http://${PREFIX}-relay.flycast:3000"
+  "RELAY_CALLBACK_URL=http://${PREFIX}-relay.flycast"
 )
 if [ -n "$GITHUB_TOKEN" ]; then
   VM_SECRETS+=("GITHUB_TOKEN=$GITHUB_TOKEN")

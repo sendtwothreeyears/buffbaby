@@ -305,7 +305,7 @@ Same as our Phase 7 deployment, but parameterized by prefix:
 | Env Var | Set On | Value | Purpose |
 |---------|--------|-------|---------|
 | `CLAUDE_HOST` | Relay | `http://{prefix}-vm.flycast` | Relay → VM (port 80, Fly Proxy maps to 3001). Uses `.flycast` for auto-start. |
-| `RELAY_CALLBACK_URL` | VM | `http://{prefix}-relay.flycast:3000` | VM → Relay callbacks |
+| `RELAY_CALLBACK_URL` | VM | `http://{prefix}-relay.flycast` | VM → Relay callbacks (port 80, Fly Proxy maps to 3000) |
 | `PUBLIC_URL` | Relay | `https://{prefix}-relay.fly.dev` | Public URL for Twilio image proxy |
 
 ## Risk Analysis

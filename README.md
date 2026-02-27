@@ -358,7 +358,7 @@ Secrets are set via `fly secrets set` (encrypted at rest). See `.env.example` an
 | `CLAUDE_HOST` | Relay | Internal URL to VM (`http://{prefix}-vm.flycast`) |
 | `PUBLIC_URL` | Relay | Public relay URL for image proxying |
 | `ANTHROPIC_API_KEY` | VM | Claude API key |
-| `RELAY_CALLBACK_URL` | VM | Internal URL to relay for callbacks |
+| `RELAY_CALLBACK_URL` | VM | Internal URL to relay for callbacks (`http://{prefix}-relay.flycast`) |
 | `GITHUB_TOKEN` | VM | (Optional) GitHub access token |
 
 ---
