@@ -44,7 +44,7 @@ COPY vm-server.js CLAUDE.md ./
 COPY test-app/ ./test-app/
 
 # Create images directory for Phase 4+ and set ownership
-RUN mkdir -p /tmp/images && chown appuser:appuser /tmp/images
+RUN mkdir -p /tmp/images /data/images && chown appuser:appuser /tmp/images /data/images
 RUN chown -R appuser:appuser /app
 
 USER appuser

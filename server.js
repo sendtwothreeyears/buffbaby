@@ -460,10 +460,32 @@ async function forwardToVM(text, from, state) {
   try {
     return await doFetch();
   } catch (err) {
-    // Cold-start retry on connection error
+    // Cold-start retry: send "Waking up..." and poll /health until VM is ready
     if (err.cause?.code === "ECONNREFUSED" || err.message.includes("ECONNREFUSED")) {
-      console.log("[RETRY] VM connection refused, retrying in 4s (cold start?)");
-      await new Promise((r) => setTimeout(r, 4000));
+      console.log("[COLD-START] VM not reachable, sending wake-up notice");
+      await sendMessage(from, "\u23f3 Waking up your VM...");
+
+      const MAX_WAIT = 30_000;
+      const POLL_INTERVAL = 3_000;
+      const start = Date.now();
+
+      while (Date.now() - start < MAX_WAIT) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        try {
+          const healthRes = await fetch(`${CLAUDE_HOST}/health`, {
+            signal: AbortSignal.timeout(2_000),
+          });
+          if (healthRes.ok) {
+            console.log("[COLD-START] VM is up, sending command");
+            return await doFetch();
+          }
+        } catch {
+          // Still waking up, keep polling
+        }
+      }
+
+      // Final attempt after max wait
+      console.log("[COLD-START] Max wait reached, final attempt");
       return await doFetch();
     }
     throw err;
@@ -474,41 +496,74 @@ async function forwardToVM(text, from, state) {
 }
 
 // --- Outbound WhatsApp helper ---
+const MAX_CHUNK = 1600; // Twilio WhatsApp sandbox limit
+
 async function sendMessage(to, body, mediaUrls = []) {
   try {
-    const params = {
+    // Split long messages into chunks
+    const chunks = [];
+    for (let i = 0; i < body.length; i += MAX_CHUNK) {
+      chunks.push(body.substring(i, i + MAX_CHUNK));
+    }
+
+    // First chunk gets the first media attachment (if any)
+    const firstParams = {
       to,
       from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
-      body,
+      body: chunks[0],
     };
     if (mediaUrls.length > 0) {
-      // WhatsApp: 1 media per message — send first image with text, rest as separate messages
-      params.mediaUrl = [mediaUrls[0]];
-      await client.messages.create(params);
-      for (const url of mediaUrls.slice(1)) {
-        await client.messages.create({
-          to,
-          from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
-          mediaUrl: [url],
-        });
-      }
-    } else {
-      await client.messages.create(params);
+      firstParams.mediaUrl = [mediaUrls[0]];
     }
+    await client.messages.create(firstParams);
+
+    // Remaining text chunks
+    for (const chunk of chunks.slice(1)) {
+      await client.messages.create({
+        to,
+        from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+        body: chunk,
+      });
+    }
+
+    // Remaining media (1 per message)
+    for (const url of mediaUrls.slice(1)) {
+      await client.messages.create({
+        to,
+        from: `whatsapp:${TWILIO_WHATSAPP_NUMBER}`,
+        mediaUrl: [url],
+      });
+    }
+
     if (mediaUrls.length > 0) {
       console.log(`[MEDIA] ${to}: ${mediaUrls.length} image(s)`);
     }
-    console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
+    if (chunks.length > 1) {
+      console.log(`[OUTBOUND] ${to}: ${body.length} chars in ${chunks.length} chunks`);
+    } else {
+      console.log(`[OUTBOUND] ${to}: ${body.substring(0, 80)}`);
+    }
   } catch (err) {
     console.error(`[OUTBOUND_ERROR] ${to}: ${err.message}`);
   }
 }
 
 // --- Start server ---
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[STARTUP] Relay listening on port ${PORT}`);
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
   console.log(`[STARTUP] Webhook: ${PUBLIC_URL}/webhook`);
   console.log(`[STARTUP] Allowlist: ${[...allowlist].join(", ")}`);
   console.log(`[STARTUP] WhatsApp: ${TWILIO_WHATSAPP_NUMBER}`);
+});
+
+// --- Graceful shutdown for Fly.io ---
+process.on("SIGTERM", () => {
+  console.log("[SHUTDOWN] SIGTERM received, closing server");
+  server.close(() => {
+    console.log("[SHUTDOWN] Server closed");
+    process.exit(0);
+  });
+  // Force exit after 10s if connections don't drain
+  setTimeout(() => process.exit(0), 10_000);
 });

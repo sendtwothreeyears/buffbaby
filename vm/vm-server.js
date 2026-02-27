@@ -21,7 +21,7 @@ if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) {
 
 const IDLE_TIMEOUT = Number(IDLE_TIMEOUT_MS);
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB cap on stdout/stderr
-const IMAGES_DIR = "/tmp/images";
+const IMAGES_DIR = process.env.IMAGES_DIR || "/tmp/images";
 const IMAGE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 const MAX_IMAGE_FILES = 100;
