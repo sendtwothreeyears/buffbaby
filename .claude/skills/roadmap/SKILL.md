@@ -1,12 +1,12 @@
 ---
 name: roadmap
-description: Capture a future plan, feature idea, or deferred work item into docs/future-plans/. Use when discussing something that should be built later but not now — after MVP, next phase, or when a dependency matures.
+description: Capture a future plan, feature idea, or deferred work item into docs/roadmap/. Use when discussing something to build later — after MVP, next phase, or when a dependency matures.
 argument-hint: "<topic description>"
 ---
 
 # Roadmap — Capture Future Plans
 
-Write a structured future plan document to `docs/future-plans/` for ideas, features, and deferred work that should be revisited after the current phase or MVP.
+Write a structured future plan document to `docs/roadmap/` for ideas, features, and deferred work that should be revisited after the current phase or MVP.
 
 ## When to Use
 
@@ -32,7 +32,7 @@ Summarize what you plan to capture and confirm with the user.
 
 ### File naming
 
-`docs/future-plans/<slug>.md`
+`docs/roadmap/<slug>.md`
 
 Slug format: lowercase, hyphens, descriptive. Examples:
 - `multi-channel-expansion.md`
@@ -41,7 +41,7 @@ Slug format: lowercase, hyphens, descriptive. Examples:
 
 ### Document structure
 
-Follow the existing pattern in `docs/future-plans/`:
+Follow the existing pattern in `docs/roadmap/`:
 
 ```markdown
 # Future Plan: <Title>
@@ -80,7 +80,7 @@ Follow the existing pattern in `docs/future-plans/`:
 - **Be concrete.** Include enough detail that a future session can pick this up without re-researching.
 - **Include tradeoffs.** If there are multiple approaches, list them with pros/cons.
 - **Link to research.** If the conversation included web searches or doc reading, include the sources.
-- **Match existing style.** Read existing files in `docs/future-plans/` and match their tone and depth.
+- **Match existing style.** Read existing files in `docs/roadmap/` and match their tone and depth.
 - **Don't over-specify.** This is a plan, not a PRD. Capture the direction and key decisions, not every implementation detail.
 
 ## Phase 3: Verify
@@ -93,6 +93,6 @@ Follow the existing pattern in `docs/future-plans/`:
 
 **Multiple future plans in one conversation:** Create separate files for each. Don't combine unrelated plans into one doc.
 
-**Plan already exists:** Check `docs/future-plans/` first. If a related doc exists, update it rather than creating a duplicate.
+**Plan already exists:** Check `docs/roadmap/` first. If a related doc exists, update it rather than creating a duplicate.
 
-**Plan is too small for its own file:** If it's a single paragraph, consider adding it to an existing related future plan doc or to `docs/future-plans/post-deploy-enhancements.md` as a new section.
+**Plan is too small for its own file:** If it's a single paragraph, consider adding it to an existing related future plan doc or to `docs/roadmap/post-deploy-enhancements.md` as a new section.

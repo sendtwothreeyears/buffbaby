@@ -19,8 +19,5 @@ node_modules/
 # Notes (personal/working files)
 notes/
 
-# Archive (old files, not tracked)
-archive/
-
 # Claude Code local settings (personal permissions)
 .claude/settings.local.json
