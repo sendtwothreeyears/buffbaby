@@ -6,23 +6,17 @@ const { CLAUDE_HOST = "http://localhost:3001" } = process.env;
 const MAX_QUEUE_DEPTH = 5;
 const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_PROGRESS_LENGTH = 4096; // truncation limit for VM progress callbacks
 
 // --- Per-user state ---
 // States: "idle" | "working" | "awaiting_approval"
 const userState = new Map();
-
-// userId → adapter mapping (set on first message from each user)
-const userAdapters = new Map();
 
 function getState(userId) {
   if (!userState.has(userId)) {
     userState.set(userId, { state: "idle", queue: [], approvalTimer: null, abortController: null });
   }
   return userState.get(userId);
-}
-
-function getAdapter(userId) {
-  return userAdapters.get(userId);
 }
 
 function createRelay(adapter) {
@@ -69,13 +63,10 @@ function createRelay(adapter) {
     const { type, message } = req.body;
 
     if (type === "progress" && message) {
-      const adp = getAdapter(userId);
-      if (adp) {
-        const truncated = message.length > 4096
-          ? message.slice(0, 4096 - 20) + "\n[truncated]"
-          : message;
-        adp.sendText(userId, truncated);
-      }
+      const truncated = message.length > MAX_PROGRESS_LENGTH
+        ? message.slice(0, MAX_PROGRESS_LENGTH - 20) + "\n[truncated]"
+        : message;
+      adapter.sendText(userId, truncated);
     }
 
     res.sendStatus(200);
@@ -83,9 +74,6 @@ function createRelay(adapter) {
 
   // --- Message handler (called by adapter) ---
   function onMessage(userId, text) {
-    // Register adapter for this user
-    userAdapters.set(userId, adapter);
-
     const state = getState(userId);
     const normalized = text.trim().toLowerCase();
 
@@ -132,7 +120,6 @@ function createRelay(adapter) {
 
   // --- Process a single command ---
   async function processCommand(userId, text, state) {
-    const adp = getAdapter(userId);
     try {
       console.log(`[FORWARD] ${userId}: ${text.substring(0, 80)}`);
       const data = await forwardToVM(text, userId, state);
@@ -145,15 +132,15 @@ function createRelay(adapter) {
         state.approvalTimer = setTimeout(() => {
           state.state = "idle";
           state.approvalTimer = null;
-          adp.sendText(userId, "Approval timed out (30 min). Changes preserved on disk.");
+          adapter.sendText(userId, "Approval timed out (30 min). Changes preserved on disk.");
         }, APPROVAL_TIMEOUT_MS);
 
-        await adp.sendApprovalPrompt(userId, data);
+        await adapter.sendApprovalPrompt(userId, data);
         return; // Don't process queue — waiting for user response
       }
 
       // Normal completion — send response and process queue
-      await adp.sendVMResponse(userId, data);
+      await adapter.sendVMResponse(userId, data);
     } catch (err) {
       console.error(`[ERROR] ${userId}: ${err.message}`);
       const message =
@@ -162,11 +149,11 @@ function createRelay(adapter) {
           : err.status === 408
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
-      await adp.sendText(userId, message);
+      await adapter.sendText(userId, message);
 
       // Send diffs from error/timeout responses (Claude may have modified files before failing)
       if (err.data?.diffs) {
-        await adp.sendVMResponse(userId, { diffs: err.data.diffs, diffSummary: err.data.diffSummary });
+        await adapter.sendVMResponse(userId, { diffs: err.data.diffs, diffSummary: err.data.diffSummary });
       }
     }
 
@@ -190,7 +177,6 @@ function createRelay(adapter) {
 
   // --- Approval handlers ---
   async function handleApprove(userId, state) {
-    const adp = getAdapter(userId);
     clearTimeout(state.approvalTimer);
     state.state = "working";
     state.approvalTimer = null;
@@ -208,18 +194,18 @@ function createRelay(adapter) {
       }
 
       if (data.prUrl) {
-        await adp.sendText(userId, `PR created: ${data.prUrl}`);
+        await adapter.sendText(userId, `PR created: ${data.prUrl}`);
       } else {
-        await adp.sendText(userId, data.text || "Approved.");
+        await adapter.sendText(userId, data.text || "Approved.");
       }
     } catch (err) {
       console.error(`[APPROVE_ERR] ${userId}: ${err.message}`);
-      await adp.sendText(userId, `Failed to create PR: ${err.message}\nReply *approve* to retry.`);
+      await adapter.sendText(userId, `Failed to create PR: ${err.message}\nReply *approve* to retry.`);
       state.state = "awaiting_approval";
       state.approvalTimer = setTimeout(() => {
         state.state = "idle";
         state.approvalTimer = null;
-        adp.sendText(userId, "Approval timed out.");
+        adapter.sendText(userId, "Approval timed out.");
       }, APPROVAL_TIMEOUT_MS);
       return;
     }
@@ -229,7 +215,6 @@ function createRelay(adapter) {
   }
 
   async function handleReject(userId, state) {
-    const adp = getAdapter(userId);
     clearTimeout(state.approvalTimer);
     state.state = "working";
     state.approvalTimer = null;
@@ -240,10 +225,10 @@ function createRelay(adapter) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approved: false }),
       });
-      await adp.sendText(userId, "Changes reverted. Ready for next command.");
+      await adapter.sendText(userId, "Changes reverted. Ready for next command.");
     } catch (err) {
       console.error(`[REJECT_ERR] ${userId}: ${err.message}`);
-      await adp.sendText(userId, `Failed to revert: ${err.message}. Changes may still be on disk.`);
+      await adapter.sendText(userId, `Failed to revert: ${err.message}. Changes may still be on disk.`);
     }
 
     state.state = "idle";
@@ -251,7 +236,6 @@ function createRelay(adapter) {
   }
 
   async function handleCancel(userId, state) {
-    const adp = getAdapter(userId);
     clearTimeout(state.approvalTimer);
     state.approvalTimer = null;
 
@@ -266,11 +250,10 @@ function createRelay(adapter) {
 
     state.state = "idle";
     state.queue.length = 0;
-    await adp.sendText(userId, "Cancelled. Changes reverted. Ready for next command.");
+    await adapter.sendText(userId, "Cancelled. Changes reverted. Ready for next command.");
   }
 
   async function handleCancelWorking(userId, state) {
-    const adp = getAdapter(userId);
     // Abort the in-flight fetch
     if (state.abortController) {
       state.abortController.abort();
@@ -284,7 +267,7 @@ function createRelay(adapter) {
     state.state = "idle";
     state.queue.length = 0;
     state.abortController = null;
-    await adp.sendText(userId, "Cancelled. Ready for next command.");
+    await adapter.sendText(userId, "Cancelled. Ready for next command.");
   }
 
   // --- HTTP to VM with timeout + cold-start retry ---
@@ -292,8 +275,6 @@ function createRelay(adapter) {
     const controller = new AbortController();
     if (state) state.abortController = controller;
     const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
-
-    const adp = getAdapter(userId);
 
     const doFetch = async () => {
       const res = await fetch(`${CLAUDE_HOST}/command`, {
@@ -318,7 +299,7 @@ function createRelay(adapter) {
       // Cold-start retry: send "Waking up..." and poll /health until VM is ready
       if (err.cause?.code === "ECONNREFUSED" || err.message.includes("ECONNREFUSED")) {
         console.log("[COLD-START] VM not reachable, sending wake-up notice");
-        await adp.sendText(userId, "\u23f3 Waking up your VM...");
+        await adapter.sendText(userId, "\u23f3 Waking up your VM...");
 
         const MAX_WAIT = 30_000;
         const POLL_INTERVAL = 3_000;
@@ -354,7 +335,6 @@ function createRelay(adapter) {
   adapter.registerRoutes(app, onMessage);
 
   // --- Startup logging ---
-  const PORT = process.env.PORT || "3000";
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
   if (adapter.logStartup) adapter.logStartup();
 
