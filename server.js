@@ -92,13 +92,11 @@ function truncateAtFileBoundary(diff, maxChars) {
   const files = diff.split(FILE_HEADER).filter(Boolean);
 
   let result = "";
-  let includedFiles = 0;
 
   for (const file of files) {
     const entry = FILE_HEADER + file;
     if (result.length + entry.length > maxChars) break;
     result += entry;
-    includedFiles++;
   }
 
   return result || diff.substring(0, maxChars);
@@ -241,6 +239,14 @@ async function processCommand(from, text, state) {
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
       await sendMessage(from, message);
+
+      // Send diffs from error/timeout responses (Claude may have modified files before failing)
+      if (err.data?.diffs) {
+        const errorDiff = formatDiffMessage(err.data.diffs, err.data.diffSummary, MAX_MSG);
+        if (errorDiff) {
+          await sendMessage(from, errorDiff.substring(0, MAX_MSG));
+        }
+      }
     }
 
     // Dequeue next message or mark idle
@@ -270,6 +276,7 @@ async function forwardToVM(text) {
         const errBody = await res.json().catch(() => ({}));
         throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
           status: res.status,
+          data: errBody,
         });
       }
       return await res.json();
