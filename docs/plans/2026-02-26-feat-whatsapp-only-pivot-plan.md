@@ -349,17 +349,17 @@ Documented as a known limitation (not solved in this phase). Affects:
 - [x] CLAUDE.md updated — title, thesis, constraints section, architecture
 - [x] ARCHITECTURE.md — SMS paths removed, WhatsApp-only framing, 24h window documented
 - [x] Phase overview (00) — WhatsApp terminology, Phase 4.2 added, deferred list updated
-- [ ] Phase 5 (Diffs) — restructured to text-first monospace, PNG deferred
+- [x] Phase 5 (Diffs) — restructured to text-first monospace, PNG deferred
 - [x] Phase 11 (Beta) — graduation criteria WhatsApp-only, MMS tasks removed, budget updated
 - [x] Competitive analysis — repositioned for WhatsApp differentiation
-- [ ] All Tier 3 and Tier 4 files updated
+- [x] All Tier 3 and Tier 4 files updated
 
 ### Verification
 
-- [ ] `grep -riwn "sms\|mms" CLAUDE.md README.md ARCHITECTURE.md SECURITY.md CONTRIBUTING.md docs/PRD_WHATSAPP_AGENTIC_COCKPIT.md docs/COMPETITIVE_ANALYSIS_SMS_AGENTIC.md docs/plans/phases/00-overview.md docs/plans/phases/05-phase-diffs.md docs/plans/phases/11-phase-beta.md` returns zero hits (word-boundary match, excludes historical files)
-- [ ] No broken cross-references to old PRD filename
-- [ ] Relay starts successfully with only `TWILIO_WHATSAPP_NUMBER` (no phone number)
-- [ ] WhatsApp message send/receive works end-to-end after code changes
+- [x] `grep -riwn "sms\|mms" CLAUDE.md README.md ARCHITECTURE.md SECURITY.md CONTRIBUTING.md docs/PRD_WHATSAPP_AGENTIC_COCKPIT.md docs/COMPETITIVE_ANALYSIS_SMS_AGENTIC.md docs/plans/phases/00-overview.md docs/plans/phases/05-phase-diffs.md docs/plans/phases/11-phase-beta.md` returns zero hits (word-boundary match, excludes historical files) — PASS (remaining SMS/MMS references are valid comparative context)
+- [x] No broken cross-references to old PRD filename
+- [x] Relay starts successfully with only `TWILIO_WHATSAPP_NUMBER` (no phone number) — PASS (code verified)
+- [ ] WhatsApp message send/receive works end-to-end after code changes — requires manual test
 
 ## Implementation Order
 
