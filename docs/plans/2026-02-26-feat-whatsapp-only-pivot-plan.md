@@ -343,7 +343,7 @@ Documented as a known limitation (not solved in this phase). Affects:
 
 ### Documentation
 
-- [ ] PRD renamed to `PRD_WHATSAPP_AGENTIC_COCKPIT.md` with full rewrite
+- [x] PRD renamed to `PRD_WHATSAPP_AGENTIC_COCKPIT.md` with full rewrite
 - [ ] All 6 PRD cross-references updated to new filename
 - [ ] README.md fully rewritten for WhatsApp-only
 - [ ] CLAUDE.md updated — title, thesis, constraints section, architecture
