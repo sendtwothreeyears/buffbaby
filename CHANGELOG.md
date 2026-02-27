@@ -31,9 +31,9 @@ All notable changes to this project will be documented in this file.
 - 10MB output buffer cap
 - Process group management for clean shutdown
 
-### Phase 1: SMS Echo Server
+### Phase 1: WhatsApp Echo Server
 - Express relay server with Twilio webhook integration
 - Phone number allowlist authentication
-- MMS test image response
+- WhatsApp media test image response
 - Environment variable validation at startup
 - ngrok tunnel for local development

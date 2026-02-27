@@ -26,7 +26,7 @@ Deliverables:
 
 ## Notes
 
-- **Fly.io Machines API:** `POST https://api.machines.dev/v1/apps/{app}/machines` to create, `DELETE /machines/{id}` to destroy. Reference the PRD's example payload (image: `registry.fly.io/sms-cockpit-vm:latest`, services: port 3000).
+- **Fly.io Machines API:** `POST https://api.machines.dev/v1/apps/{app}/machines` to create, `DELETE /machines/{id}` to destroy. Reference the PRD's example payload (image: `registry.fly.io/whatsapp-cockpit-vm:latest`, services: port 3000).
 - **Credential handling for V1:** Use `fly secrets set` to inject user credentials as environment variables on each machine. Fly.io encrypts these at rest. This avoids building a custom encryption layer for V1. Custom AES-256 encryption with per-user keys can be added later if needed.
 - The phone → VM mapping doesn't need a database yet — can use a JSON file or in-memory store for testing. Phase 9 adds the real database.
 - Test with a second phone number (or Twilio test credentials) to verify multi-user routing works.

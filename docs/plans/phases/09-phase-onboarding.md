@@ -15,12 +15,12 @@ Deliverables:
 - User sends WhatsApp opt-in message (join code), then receives welcome reply: "You're set up. Send me anything to start."
 - Relay updated to look up phone → VM mapping from Supabase instead of in-memory store
 - Idempotency: if a phone number already has a VM, redirect to "you're already set up" instead of provisioning a second VM
-- Error handling: if provisioning fails, show error on page + don't send welcome SMS + allow retry
+- Error handling: if provisioning fails, show error on page + don't send welcome WhatsApp message + allow retry
 
 ## Tasks
 
 - [ ] Build Supabase schema for user accounts — phone number, VM address, encrypted credentials, RLS policies
-  - Plan: `/workflow:plan Supabase user database schema with RLS for SMS cockpit`
+  - Plan: `/workflow:plan Supabase user database schema with RLS for WhatsApp cockpit`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-supabase-schema-plan.md`
 
 - [ ] Build onboarding page on Vercel — phone verification, GitHub OAuth, API key form, triggers provisioning on submit

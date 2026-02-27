@@ -15,7 +15,7 @@ Deliverables:
 - Consolidated summary sent when all agents complete
 - Review summary images (from user's workflow) sent via WhatsApp media
 - **Message batching:** If multiple agents complete within seconds of each other, batch their updates into a single message to reduce noise and cost
-- **Fallback:** If the relay cannot detect multi-agent patterns, fall back to forwarding raw output as regular SMS (Phase 3/6 behavior). Never silently swallow output.
+- **Fallback:** If the relay cannot detect multi-agent patterns, fall back to forwarding raw output as regular WhatsApp messages (Phase 3/6 behavior). Never silently swallow output.
 
 ## Tasks
 
@@ -23,8 +23,8 @@ Deliverables:
   - Plan: `/workflow:plan multi-agent output format investigation — characterize claude --headless output with sub-agents`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-multi-agent-spike-plan.md` (deliverable: documentation in `docs/`)
 
-- [ ] Implement per-agent progress SMS parsing and delivery with message batching
-  - Plan: `/workflow:plan multi-agent status parsing — detect agent boundaries, send per-agent SMS, batch rapid completions`
+- [ ] Implement per-agent progress message parsing and delivery with message batching
+  - Plan: `/workflow:plan multi-agent status parsing — detect agent boundaries, send per-agent WhatsApp messages, batch rapid completions`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-multi-agent-parsing-plan.md`
 
 - [ ] Implement consolidated summary detection and review summary image delivery via WhatsApp media

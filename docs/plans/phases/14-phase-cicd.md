@@ -11,18 +11,18 @@ After a PR is created, the relay listens for GitHub Actions webhook events and s
 Deliverables:
 - GitHub Actions webhook listener on the relay server
 - **GitHub webhook signature validation** (HMAC-SHA256) — security requirement
-- Build status SMS: "GitHub Actions: building..." → "GitHub Actions: passed" or "GitHub Actions: failed"
+- Build status message: "GitHub Actions: building..." → "GitHub Actions: passed" or "GitHub Actions: failed"
 - Staging screenshot capture after successful deployment
 - **User-to-webhook routing:** Relay maps GitHub webhook events (repo/PR) to the owning user's phone number via Supabase
 
 ## Tasks
 
 - [ ] Add GitHub Actions webhook listener — receive events, validate signatures, route to user, send build status as WhatsApp messages
-  - Plan: `/workflow:plan GitHub Actions webhook listener — signature validation, user routing, build status SMS`
+  - Plan: `/workflow:plan GitHub Actions webhook listener — signature validation, user routing, build status WhatsApp messages`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-cicd-webhooks-plan.md`
 
 - [ ] Add staging screenshot capture after successful deployment — trigger Playwright on VM, send screenshot via WhatsApp media
-  - Plan: `/workflow:plan staging screenshot pipeline — detect deploy success, trigger Playwright, send MMS`
+  - Plan: `/workflow:plan staging screenshot pipeline — detect deploy success, trigger Playwright, send WhatsApp media`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-staging-screenshots-plan.md`
 
 ## Notes

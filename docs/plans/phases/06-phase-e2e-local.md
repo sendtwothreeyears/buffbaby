@@ -34,7 +34,7 @@ awaiting_approval ──(30 min timeout)──→ idle (send "Approval timed out
 ## Tasks
 
 - [ ] Wire progress update streaming — container POSTs milestones to relay callback endpoint, relay sends as WhatsApp messages
-  - Plan: `/workflow:plan progress update streaming — container callback to relay, relay sends periodic SMS status updates`
+  - Plan: `/workflow:plan progress update streaming — container callback to relay, relay sends periodic WhatsApp status updates`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-progress-updates-plan.md`
 
 - [ ] Implement approval flow — relay state machine with approve/reject/cancel handling
@@ -43,7 +43,7 @@ awaiting_approval ──(30 min timeout)──→ idle (send "Approval timed out
 
 ## Notes
 
-- **Why callback, not WebSocket:** The PRD says "no real-time streaming — SMS delivers complete messages, not character-by-character streams." WhatsApp is a batch-delivery mechanism. Callback (container POSTs milestones to relay) is simpler, stateless on the relay, and consistent with the relay's existing HTTP architecture. WebSocket adds connection management complexity for no benefit.
+- **Why callback, not WebSocket:** The PRD says "no real-time streaming — WhatsApp delivers complete messages, not character-by-character streams." WhatsApp is a batch-delivery mechanism. Callback (container POSTs milestones to relay) is simpler, stateless on the relay, and consistent with the relay's existing HTTP architecture. WebSocket adds connection management complexity for no benefit.
 - **GitHub auth required:** The Docker container must have a `GITHUB_TOKEN` environment variable for PR creation. In local dev, inject via `docker run -e GITHUB_TOKEN=...` or `docker-compose.yml`. Ensure this was set up in Phase 2's `.env.example`.
 - **Twilio webhook timeout:** The relay must respond to Twilio's inbound webhook within 15 seconds (solved in Phase 3's async pattern). For long-running tasks in Phase 6, this is critical — Claude Code may run for minutes.
 - This is the **demo milestone**. At the end of Phase 6, you can show someone the product working from your phone. Everything after this is deployment and polish.

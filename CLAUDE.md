@@ -19,7 +19,7 @@ Three components:
 2. **Cloud VM** (`vm/`) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
 3. **Twilio** — WhatsApp transport. Webhooks inbound, API outbound. WhatsApp via Twilio Sandbox (dev) or Business number (prod).
 
-**Phase plan:** `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` — sequenced development phases.
+**Phase plan:** `docs/plans/phases/00-overview.md` — sequenced development phases.
 
 ## Key Files
 
@@ -172,7 +172,7 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 - 1 media attachment per message (multiple images = multiple messages)
 - 4096-char message limit
 - Monospace code blocks supported (triple backtick)
-- 16MB media limit (vs 1MB for MMS)
+- 16MB media limit
 
 ### Docker-First Development
 

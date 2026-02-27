@@ -23,7 +23,7 @@ The repo is functional but internal-facing:
 - `package.json` files marked `private: true` with no metadata
 - Git remote `upstream` points to the previous project's repo
 - Git history contains previous project identity in early commits
-- No Channel abstraction — SMS transport is hardcoded
+- No Channel abstraction — WhatsApp transport is hardcoded
 - No `/setup` skill for AI-native onboarding
 
 ## Proposed Solution
@@ -127,23 +127,23 @@ The current README (229 lines) describes "Authentic's Agentic Engineering Techni
 ```markdown
 # textslash
 
-> Control a cloud dev environment from any phone. No app. No internet plan. Just SMS.
+> Control a cloud dev environment from any phone. No laptop required. Just WhatsApp.
 
 [one-paragraph description of what textslash is]
 
-## Why SMS?
+## Why WhatsApp?
 
-[3-4 bullet points: universal, no app install, works without internet, telecom audit trail]
+[3-4 bullet points: 2B+ users, rich formatting (monospace code blocks), 16MB media, reliable delivery]
 
 ## Architecture
 
-Phone (SMS) → Twilio → Relay Server → Docker VM (Claude Code)
+Phone (WhatsApp) → Twilio → Relay Server → Docker VM (Claude Code)
 
 [ASCII diagram of the three-layer system]
 
 ## Status
 
-Alpha — Phases 1-2 complete. The relay server echoes SMS with MMS test images. The Docker VM runs Claude Code headlessly via HTTP API. Phase 3 (wiring relay → VM) is next.
+Alpha — Phases 1-4 complete. The relay server handles WhatsApp messages via Twilio. The Docker VM runs Claude Code headlessly via HTTP API.
 
 [honest status table of what works and what doesn't]
 
@@ -152,7 +152,7 @@ Alpha — Phases 1-2 complete. The relay server echoes SMS with MMS test images.
 ### Prerequisites
 - Node.js 22+
 - Docker
-- A Twilio account with an SMS-capable phone number
+- A Twilio account with WhatsApp Sandbox (dev) or Business API (prod)
 - An Anthropic API key
 - ngrok (for local development)
 
@@ -164,7 +164,7 @@ Then run /setup and follow the prompts.
 [step-by-step: .env config, Docker build, relay start, ngrok, Twilio webhook config]
 
 ### Try It
-1. SMS relay: Text your Twilio number, get an echo + test image
+1. WhatsApp relay: Send a WhatsApp message to the Twilio sandbox number, get a response
 2. Claude Code VM: curl -X POST http://localhost:3001/command -d '{"prompt":"hello"}'
 
 ## How It Compares
@@ -180,7 +180,7 @@ See CONTRIBUTING.md. TL;DR: bug fixes and simplifications welcome. New features 
 MIT
 ```
 
-**Key principle:** Be honest about alpha state. Don't claim "SMS interface to Claude Code" when the two aren't wired yet. Present the two components as separately working and Phase 3 as next.
+**Key principle:** Be honest about alpha state. Present the current state accurately and highlight what works and what's next.
 
 #### 2b. LICENSE
 
@@ -193,44 +193,43 @@ Standard MIT license file at repo root. Use the developer's name from `git confi
 
 ## Three-Layer System
 
-Phone (SMS) ←→ Twilio ←→ Relay Server ←→ Docker VM
+Phone (WhatsApp) ←→ Twilio ←→ Relay Server ←→ Docker VM
 
 ### Layer 1: Relay Server (server.js — 64 LOC)
-[Express server, Twilio webhooks, phone allowlist, MMS support]
-[Current state: echo server. Phase 3 adds VM forwarding]
+[Express server, Twilio webhooks, phone allowlist, WhatsApp media support]
 
 ### Layer 2: Docker VM (vm/vm-server.js — 157 LOC)
 [HTTP API wrapping Claude Code CLI, single-command concurrency, image serving]
 [Endpoints: POST /command, GET /health, GET /images/:filename]
 
 ### Layer 3: Twilio Transport
-[Inbound: webhooks. Outbound: Twilio API. MMS for images]
+[Inbound: webhooks. Outbound: Twilio API. WhatsApp media for images]
 
 ## File Map
 
 | File | Purpose | LOC |
 |------|---------|-----|
-| server.js | Relay server — receives SMS, sends responses | 64 |
+| server.js | Relay server — receives WhatsApp messages, sends responses | 64 |
 | vm/vm-server.js | VM HTTP API — wraps Claude Code CLI | 157 |
 | vm/Dockerfile | Docker image — Node 22, Chromium, Claude Code | 51 |
 | docker-compose.yml | VM orchestration | 13 |
 
 ## Data Flow
 
-[Inbound SMS flow diagram]
+[Inbound WhatsApp flow diagram]
 [Outbound response flow diagram]
 [Image rendering pipeline (future)]
 
 ## Design Decisions
 
 - Persistent VMs (not ephemeral containers) — users need project state
-- Webhooks (not polling) — SMS requires low-latency delivery
+- Webhooks (not polling) — WhatsApp requires low-latency delivery
 - Non-root Docker user — required by Claude Code for --dangerously-skip-permissions
 - Single-command concurrency — prevents resource contention on the VM
 
-## Future: Channel Abstraction
+## Channel Architecture
 
-The relay server is designed to support multiple transport channels. Currently SMS-only via Twilio. WhatsApp is planned as the second channel. See the Channel interface design in CONTRIBUTING.md.
+The relay server uses WhatsApp via Twilio as its transport channel. See the Channel interface design in CONTRIBUTING.md.
 ```
 
 #### 2d. SECURITY.md
@@ -331,7 +330,7 @@ interface Channel {
   isConnected(): boolean;
 }
 
-SMS is the first implementation. WhatsApp is planned. No other platforms.
+WhatsApp via Twilio is the current implementation.
 ```
 
 #### 2f. CHANGELOG.md
@@ -358,10 +357,10 @@ SMS is the first implementation. WhatsApp is planned. No other platforms.
 - 10MB output buffer cap
 - Process group management for clean shutdown
 
-### Phase 1: SMS Echo Server
+### Phase 1: WhatsApp Echo Server
 - Express relay server with Twilio webhook integration
 - Phone number allowlist authentication
-- MMS test image response
+- WhatsApp media test response
 - Environment variable validation at startup
 - ngrok tunnel for local development
 ```
@@ -375,7 +374,7 @@ Add a key-files routing table near the top of CLAUDE.md (after Architecture sect
 
 | File | What It Does | When to Read |
 |------|-------------|--------------|
-| `server.js` | Relay server — Twilio webhooks, phone allowlist, SMS/MMS | Changing relay behavior |
+| `server.js` | Relay server — Twilio webhooks, phone allowlist, WhatsApp messaging | Changing relay behavior |
 | `vm/vm-server.js` | VM API — Claude Code CLI wrapper, image serving | Changing VM behavior |
 | `vm/Dockerfile` | Container image — Node 22, Chromium, Claude Code | Changing container setup |
 | `docker-compose.yml` | VM orchestration — ports, memory, env | Changing local dev setup |
@@ -428,7 +427,7 @@ Both `package.json` files need metadata updates:
   "bugs": {
     "url": "https://github.com/<owner>/textslash/issues"
   },
-  "keywords": ["sms", "claude", "ai", "development", "twilio", "mms"],
+  "keywords": ["whatsapp", "claude", "ai", "development", "twilio"],
   "engines": {
     "node": ">=22.0.0"
   }
@@ -450,8 +449,8 @@ Decide placement of root-level internal documents:
 | Document | Recommendation | Rationale |
 |----------|---------------|-----------|
 | `PRD_WHATSAPP_AGENTIC_COCKPIT.md` | Move to `docs/` | Contains internal author name and business strategy — valuable for transparency but shouldn't clutter root |
-| `COMPETITIVE_ANALYSIS_SMS_AGENTIC.md` | Move to `docs/` | Names competitors extensively — useful context but not a root-level file |
-| `PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` | Move to `docs/` | Marked as superseded — individual phase plans in `docs/plans/phases/` are authoritative |
+| `COMPETITIVE_ANALYSIS_WHATSAPP_AGENTIC.md` | Move to `docs/` | Names competitors extensively — useful context but not a root-level file |
+| `PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` | Deleted (superseded by `docs/plans/phases/00-overview.md`) | Individual phase plans in `docs/plans/phases/` are authoritative |
 
 Root directory after cleanup should contain only: `README.md`, `LICENSE`, `ARCHITECTURE.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `CLAUDE.md`, `package.json`, `package-lock.json`, `server.js`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.dockerignore`
 
@@ -499,14 +498,14 @@ Create `.claude/skills/setup/SKILL.md` — an AI-native installer that walks dev
    - Update `PUBLIC_URL` in `.env`
 7. **Configure Twilio webhook:**
    - Guide to Twilio console → Phone Number → Messaging → Webhook URL
-   - Or use Twilio CLI: `twilio phone-numbers:update <number> --sms-url <ngrok-url>/sms`
+   - Or configure WhatsApp Sandbox webhook URL in Twilio Console to point to `<ngrok-url>/sms`
 8. **Verify end-to-end:**
-   - "Send a text to your Twilio number now"
+   - "Send a WhatsApp message to the Twilio sandbox number now"
    - Check relay logs for inbound message
    - Confirm echo response received
 
 **Important warnings to include:**
-- **A2P 10DLC:** US-based Twilio numbers require A2P 10DLC registration for reliable SMS delivery. This takes 3-15 business days. The `/setup` skill should detect US numbers and warn about this requirement prominently.
+- **WhatsApp Sandbox:** Users must send a join code to the sandbox number before first use. The `/setup` skill should guide this step.
 - **Twilio trial limitations:** Trial accounts can only send to verified numbers. The skill should detect trial mode and explain the limitation.
 
 #### 4b. Add `.github/` Templates
@@ -591,7 +590,7 @@ git push origin v0.1.0-alpha
 ### Quality Gates
 
 - [ ] A fresh `git clone` → read README → understand what the project is (< 60 seconds)
-- [ ] A fresh `git clone` → `claude` → `/setup` → working system (< 15 minutes, excluding A2P 10DLC)
+- [ ] A fresh `git clone` → `claude` → `/setup` → working system (< 15 minutes)
 - [ ] No references to "Authentic" or the previous project in any tracked file
 
 ---
@@ -606,10 +605,9 @@ git push origin v0.1.0-alpha
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| A2P 10DLC blocks US developers | High | Medium | Document prominently, suggest trial account with verified numbers first |
-| Contributors confused by relay ↔ VM not being connected | Medium | High | Explicit "Status" section in README, honest about Phase 3 being next |
+| WhatsApp Sandbox join-code friction for new contributors | Medium | Low | Document prominently in setup guide, include step-by-step |
 | `/setup` skill fails on untested OS/configs | Medium | Medium | Start with Mac + Linux, document Windows as unsupported |
-| Competitive backlash from NanoClaw community | Low | Low | Position as complementary (SMS gap), not competitive |
+| Competitive backlash from NanoClaw community | Low | Low | Position as complementary (WhatsApp-native dev tool), not competitive |
 
 ## Implementation Order
 
@@ -630,10 +628,10 @@ Make repo public + tag v0.1.0-alpha
 ## Not In Scope (Explicitly Deferred)
 
 - **Phase 3 relay-to-VM wiring** — separate phase plan, not part of OSS release
-- **Channel abstraction implementation** — interface documented in CONTRIBUTING.md, built when WhatsApp work begins (adding code with one implementation adds complexity without value)
+- **Channel abstraction implementation** — interface documented in CONTRIBUTING.md for future extensibility
 - **Test suite** — listed as nice-to-have in brainstorm, deferred to post-release
 - **CI/CD pipeline** — no GitHub Actions until there are tests to run
-- **WhatsApp support** — future phase, documented as planned
+- **WhatsApp Business API (production)** — future phase, currently using Sandbox for dev
 
 ## References
 
@@ -641,10 +639,10 @@ Make repo public + tag v0.1.0-alpha
 
 - Brainstorm: `docs/brainstorms/2026-02-26-open-source-release-brainstorm.md`
 - Docker lessons: `docs/solutions/developer-experience/docker-vm-claude-code-headless-setup-20260225.md`
-- Twilio lessons: `docs/solutions/developer-experience/sms-echo-server-twilio-ngrok-setup-20250225.md`
+- Twilio lessons: `docs/solutions/developer-experience/whatsapp-echo-server-twilio-ngrok-setup-20250225.md`
 - Phase plans: `docs/plans/phases/`
 
 ### External
 
 - [NanoClaw GitHub](https://github.com/qwibitai/nanoclaw) — AI-native setup pattern, skills-over-features model
-- [Twilio A2P 10DLC Guide](https://www.twilio.com/docs/messaging/guides/10dlc) — US SMS compliance
+- [Twilio WhatsApp API](https://www.twilio.com/docs/whatsapp) — WhatsApp Sandbox and Business API

@@ -38,6 +38,7 @@ A single Phase 4.3 PR with two parts:
 #### 1.1 `server.js` — WhatsApp-Only Relay
 
 **Remove:**
+
 - `TWILIO_PHONE_NUMBER` from env destructuring and `required` array
 - `isWhatsApp` branching in `sendMessage()` — always use WhatsApp `from` address
 - `MAX_MMS_MEDIA` constant (WhatsApp sends 1 media per message)
@@ -46,6 +47,7 @@ A single Phase 4.3 PR with two parts:
 - MMS comment at line 112: `// MMS check (text-only for Phase 3)` — update to reflect WhatsApp context
 
 **Change:**
+
 - Rename endpoint: `POST /sms` → `POST /webhook`
 - Update webhook validator URL: `PUBLIC_URL + "/sms"` → `PUBLIC_URL + "/webhook"`
 - Update startup log: `Webhook: ${PUBLIC_URL}/sms` → `Webhook: ${PUBLIC_URL}/webhook`
@@ -55,6 +57,7 @@ A single Phase 4.3 PR with two parts:
 - Increase text truncation from 1500 → 4096 chars (WhatsApp max)
 
 **Keep:**
+
 - `whatsapp:` prefix stripping for allowlist lookup (allowlist stores bare E.164 numbers)
 - All `forwardToVM()` logic (transport-agnostic, unchanged)
 - Image proxy endpoint (`/images/:filename`) — unchanged
@@ -97,9 +100,11 @@ async function sendMessage(to, body, mediaUrls = []) {
 #### 1.2 `.env.example`
 
 **Remove:**
+
 - `TWILIO_PHONE_NUMBER` line and comment
 
 **Change:**
+
 - `TWILIO_WHATSAPP_NUMBER` from optional to required (remove "optional" language)
 - Webhook URL instruction: `/sms` → `/webhook`
 
@@ -133,6 +138,7 @@ PORT=3000
 #### 1.3 `package.json`
 
 **Change:**
+
 - `description`: "SMS relay server" → "WhatsApp relay server for textslash — control Claude Code via WhatsApp"
 - `keywords`: remove `"sms"`, `"mms"`, add `"whatsapp"`
 
@@ -149,6 +155,7 @@ Rename file. Update all 6 cross-references (listed below).
 **Thesis rewrite:** "SMS is the one universal interface on every phone" → "WhatsApp is the world's most popular messaging app — 2B+ users, rich formatting, no additional app to download for most users."
 
 **Key section changes:**
+
 - **Problem statement:** Rewrite around WhatsApp. Drop "works on flip phones" / "no internet needed" arguments (WhatsApp requires a smartphone + internet)
 - **Core differentiator:** Shifts from "zero-install SMS" to "WhatsApp is already installed + rich formatting (monospace code blocks, 16MB media) + reliable delivery (in-order, read receipts)"
 - **Goals & Success Metrics:** Replace all "SMS" → "WhatsApp message", "MMS" → "media message"
@@ -161,14 +168,14 @@ Rename file. Update all 6 cross-references (listed below).
 
 **PRD cross-references to update (6 files):**
 
-| File | Current reference | New reference |
-|------|-------------------|---------------|
-| `CLAUDE.md` | `docs/PRD_SMS_AGENTIC_COCKPIT.md` | `docs/PRD_WHATSAPP_AGENTIC_COCKPIT.md` |
-| `docs/plans/phases/00-overview.md` | `PRD_SMS_AGENTIC_COCKPIT.md` | `PRD_WHATSAPP_AGENTIC_COCKPIT.md` |
-| `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` | `PRD_SMS_AGENTIC_COCKPIT.md` | `PRD_WHATSAPP_AGENTIC_COCKPIT.md` |
-| `docs/plans/2026-02-26-feat-open-source-release-plan.md` | contextual references | update to new filename |
-| `docs/plans/2026-02-25-feat-sms-echo-server-plan.md` | contextual reference | update to new filename |
-| brainstorm doc (this phase) | self-referential | no change needed |
+| File                                                     | Current reference                 | New reference                          |
+| -------------------------------------------------------- | --------------------------------- | -------------------------------------- |
+| `CLAUDE.md`                                              | `docs/PRD_SMS_AGENTIC_COCKPIT.md` | `docs/PRD_WHATSAPP_AGENTIC_COCKPIT.md` |
+| `docs/plans/phases/00-overview.md`                       | `PRD_SMS_AGENTIC_COCKPIT.md`      | `PRD_WHATSAPP_AGENTIC_COCKPIT.md`      |
+| `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md`                 | Deleted (superseded by `docs/plans/phases/00-overview.md`) | N/A — file removed      |
+| `docs/plans/2026-02-26-feat-open-source-release-plan.md` | contextual references             | update to new filename                 |
+| `docs/plans/2026-02-25-feat-sms-echo-server-plan.md`     | contextual reference              | update to new filename                 |
+| brainstorm doc (this phase)                              | self-referential                  | no change needed                       |
 
 ---
 
@@ -272,42 +279,42 @@ Already partially updated by Phase 4.2. Remaining changes:
 
 #### Tier 3: Light Targeted Edits (11 files)
 
-| File | Changes |
-|------|---------|
-| `docs/plans/phases/05-phase-diffs.md` | **Restructure scope.** Diff-to-PNG pipeline becomes secondary. Primary: monospace text diffs sent as WhatsApp messages. PNG rendering deferred to Phase 5b/16 for large diffs (50+ lines). Remove 1MB MMS limit references. Update "done when" to reflect text-first approach. Remove "Twilio MMS" from deliverables. |
-| `docs/plans/phases/06-phase-e2e-local.md` | "SMS" → "WhatsApp message" in state machine descriptions, progress streaming |
-| `docs/plans/phases/07-phase-deploy.md` | Remove `TWILIO_PHONE_NUMBER` from secrets management. Add `TWILIO_WHATSAPP_NUMBER` as required secret. Update webhook URL to `/webhook`. |
-| `docs/plans/phases/09-phase-onboarding.md` | Rewrite onboarding flow for WhatsApp. Add WhatsApp opt-in step (sandbox join code or `wa.me` link). Welcome message must be a reply to user's initial message (24-hour window). Remove SMS verification — use WhatsApp or email. |
-| `docs/plans/phases/12-phase-conversational-nav.md` | "SMS bridge" → "messaging bridge" |
-| `docs/plans/phases/13-phase-multi-agent.md` | "SMS messages" → "messages", note WhatsApp formatting advantage (monospace blocks for per-agent status) |
-| `docs/plans/phases/14-phase-cicd.md` | "SMS" → "WhatsApp" for build status. Add note: CI/CD notifications require active 24-hour session window or approved template messages. |
-| `docs/plans/phases/16-phase-ux-polish.md` | Note composite images are less critical (WhatsApp delivers in order, per-message cost is low). May deprioritize. |
-| `docs/plans/2026-02-26-feat-open-source-release-plan.md` | Update all public-facing language. "SMS" → "WhatsApp". Update PRD filename reference. |
-| `.claude/skills/setup/SKILL.md` | Remove SMS setup instructions. Add WhatsApp Sandbox setup as the primary path. Update webhook URL to `/webhook`. |
-| `.claude/skills/phase-prd/SKILL.md` | Update example language |
+| File                                                     | Changes                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/plans/phases/05-phase-diffs.md`                    | **Restructure scope.** Diff-to-PNG pipeline becomes secondary. Primary: monospace text diffs sent as WhatsApp messages. PNG rendering deferred to Phase 5b/16 for large diffs (50+ lines). Remove 1MB MMS limit references. Update "done when" to reflect text-first approach. Remove "Twilio MMS" from deliverables. |
+| `docs/plans/phases/06-phase-e2e-local.md`                | "SMS" → "WhatsApp message" in state machine descriptions, progress streaming                                                                                                                                                                                                                                          |
+| `docs/plans/phases/07-phase-deploy.md`                   | Remove `TWILIO_PHONE_NUMBER` from secrets management. Add `TWILIO_WHATSAPP_NUMBER` as required secret. Update webhook URL to `/webhook`.                                                                                                                                                                              |
+| `docs/plans/phases/09-phase-onboarding.md`               | Rewrite onboarding flow for WhatsApp. Add WhatsApp opt-in step (sandbox join code or `wa.me` link). Welcome message must be a reply to user's initial message (24-hour window). Remove SMS verification — use WhatsApp or email.                                                                                      |
+| `docs/plans/phases/12-phase-conversational-nav.md`       | "SMS bridge" → "messaging bridge"                                                                                                                                                                                                                                                                                     |
+| `docs/plans/phases/13-phase-multi-agent.md`              | "SMS messages" → "messages", note WhatsApp formatting advantage (monospace blocks for per-agent status)                                                                                                                                                                                                               |
+| `docs/plans/phases/14-phase-cicd.md`                     | "SMS" → "WhatsApp" for build status. Add note: CI/CD notifications require active 24-hour session window or approved template messages.                                                                                                                                                                               |
+| `docs/plans/phases/16-phase-ux-polish.md`                | Note composite images are less critical (WhatsApp delivers in order, per-message cost is low). May deprioritize.                                                                                                                                                                                                      |
+| `docs/plans/2026-02-26-feat-open-source-release-plan.md` | Update all public-facing language. "SMS" → "WhatsApp". Update PRD filename reference.                                                                                                                                                                                                                                 |
+| `.claude/skills/setup/SKILL.md`                          | Remove SMS setup instructions. Add WhatsApp Sandbox setup as the primary path. Update webhook URL to `/webhook`.                                                                                                                                                                                                      |
+| `.claude/skills/phase-prd/SKILL.md`                      | Update example language                                                                                                                                                                                                                                                                                               |
 
 ---
 
 #### Tier 4: Terminology Updates Only (8 files)
 
-| File | Changes |
-|------|---------|
-| `SECURITY.md` | "MMS media" → "WhatsApp media". Update allowlist description. |
-| `CONTRIBUTING.md` | "Twilio <-> SMS" → "Twilio <-> WhatsApp" |
-| `docs/plans/phases/08-phase-provisioning.md` | "SMS" → "WhatsApp message" |
-| `docs/plans/phases/10-phase-session-mgmt.md` | "via SMS" → "via WhatsApp" |
+| File                                           | Changes                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `SECURITY.md`                                  | "MMS media" → "WhatsApp media". Update allowlist description.                                                       |
+| `CONTRIBUTING.md`                              | "Twilio <-> SMS" → "Twilio <-> WhatsApp"                                                                            |
+| `docs/plans/phases/08-phase-provisioning.md`   | "SMS" → "WhatsApp message"                                                                                          |
+| `docs/plans/phases/10-phase-session-mgmt.md`   | "via SMS" → "via WhatsApp"                                                                                          |
 | `docs/plans/phases/15-phase-error-recovery.md` | "sends SMS" → "sends WhatsApp message". Add note about 24-hour window limitation for proactive error notifications. |
-| `vm/CLAUDE.md` | "MMS image" → "WhatsApp media" |
-| `vm/test-app/index.html` | Title: "SMS Cockpit Test App" → "textslash Test App". Remove MMS references. |
-| `CHANGELOG.md` | Add Phase 4.2 (WhatsApp Channel) entry to [Unreleased]. Historical entries untouched. |
+| `vm/CLAUDE.md`                                 | "MMS image" → "WhatsApp media"                                                                                      |
+| `vm/test-app/index.html`                       | Title: "SMS Cockpit Test App" → "textslash Test App". Remove MMS references.                                        |
+| `CHANGELOG.md`                                 | Add Phase 4.2 (WhatsApp Channel) entry to [Unreleased]. Historical entries untouched.                               |
 
 ---
 
 #### Tier 4b: One-Line Annotation (1 file)
 
-| File | Changes |
-|------|---------|
-| `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` | Add annotation to "Multi-channel expansion (WhatsApp, Telegram, Discord)" under "DEFERRED BEYOND V1": `(Note: WhatsApp implemented in Phase 4.2, 2026-02-26)`. No other changes — this file is superseded but the deferred list is factually wrong. |
+| File                                     | Changes                                                                                                                                                                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` | File deleted (superseded by `docs/plans/phases/00-overview.md`). The annotation was applied before deletion. |
 
 #### Tier 5: No Changes (18+ files)
 
@@ -319,11 +326,11 @@ Completed phase plans (01-04.1), historical brainstorms, solution documents. The
 
 Documented as a known limitation (not solved in this phase). Affects:
 
-| Future Phase | Impact | Mitigation |
-|-------------|--------|------------|
-| Phase 14 (CI/CD) | Build status notifications fail if user hasn't messaged in 24h | Requires template messages or user must opt in to periodic pings |
+| Future Phase              | Impact                                                                | Mitigation                                                         |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Phase 14 (CI/CD)          | Build status notifications fail if user hasn't messaged in 24h        | Requires template messages or user must opt in to periodic pings   |
 | Phase 15 (Error Recovery) | Stale session reminders, VM restart notifications fail outside window | Document as limitation; template messages are a future enhancement |
-| Phase 9 (Onboarding) | Welcome message must be a reply, not a cold send | User initiates conversation first (join code), then system replies |
+| Phase 9 (Onboarding)      | Welcome message must be a reply, not a cold send                      | User initiates conversation first (join code), then system replies |
 
 **Resolution path:** Meta Business verification + approved template messages. This is a production concern (Stage 2+), not a local development concern (Stage 1).
 
