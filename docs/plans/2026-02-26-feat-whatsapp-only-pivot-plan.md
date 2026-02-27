@@ -1,7 +1,7 @@
 ---
 title: "feat: WhatsApp-Only Pivot — Code + Documentation Update"
 type: feat
-status: active
+status: completed
 date: 2026-02-26
 ---
 
