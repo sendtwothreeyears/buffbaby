@@ -216,4 +216,6 @@ Keep entries concise. One line per lesson:
 
 ## Lessons Learned
 
-_(None yet — add lessons here as you discover them)_
+- **Flycast**: Use port 80 (default), NOT the internal_port. `http://app.flycast/health` works; `http://app.flycast:3001/health` returns ECONNRESET. Fly Proxy maps port 80 → internal_port automatically.
+- **Flycast**: `.flycast` routes through Fly Proxy (enables auto-start). `.internal` goes direct to the Machine (no auto-start for stopped VMs).
+- **Twilio WhatsApp Sandbox**: 1600-char message limit (stricter than WhatsApp's 4096). Long responses must be chunked.
