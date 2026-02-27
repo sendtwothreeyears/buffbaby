@@ -37,13 +37,15 @@ app.use(express.json()); // for VM callbacks
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
 const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
+const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 // --- Per-user state ---
-const userState = new Map(); // Map<phone, { busy: boolean, queue: string[] }>
+// States: "idle" | "working" | "awaiting_approval"
+const userState = new Map();
 
 function getState(phone) {
   if (!userState.has(phone)) {
-    userState.set(phone, { busy: false, queue: [] });
+    userState.set(phone, { state: "idle", queue: [], approvalTimer: null, abortController: null });
   }
   return userState.get(phone);
 }
@@ -140,6 +142,22 @@ function formatDiffMessage(diffs, diffSummary, budget) {
   return SEPARATOR + CODE_OPEN + truncatedDiff + CODE_CLOSE + summaryText;
 }
 
+// --- Format approval prompt ---
+function formatApprovalPrompt(data) {
+  let msg = data.text || "Changes ready for review.";
+
+  if (data.diffs) {
+    const diffFormatted = formatDiffMessage(data.diffs, data.diffSummary, MAX_MSG - msg.length - 100);
+    if (diffFormatted) {
+      msg += diffFormatted;
+    }
+  }
+
+  msg += "\n\nReply *approve* to create PR or *reject* to undo.";
+
+  return msg.slice(0, MAX_MSG);
+}
+
 // --- Core WhatsApp handler ---
 app.post("/webhook", webhookValidator, async (req, res) => {
   const from = req.body.From;
@@ -168,9 +186,29 @@ app.post("/webhook", webhookValidator, async (req, res) => {
     return sendMessage(from, "I received an empty message.");
   }
 
-  // Queue or forward
   const state = getState(from);
-  if (state.busy) {
+  const normalized = body.trim().toLowerCase();
+
+  // --- State: awaiting_approval — only accept keywords ---
+  if (state.state === "awaiting_approval") {
+    if (["approve", "a"].includes(normalized)) {
+      handleApprove(from, state);
+    } else if (["reject", "r"].includes(normalized)) {
+      handleReject(from, state);
+    } else if (["cancel", "c"].includes(normalized)) {
+      handleCancel(from, state);
+    } else {
+      sendMessage(from, "Reply *approve* to create PR or *reject* to undo changes.");
+    }
+    return;
+  }
+
+  // --- State: working — accept cancel, queue everything else ---
+  if (state.state === "working") {
+    if (["cancel", "c"].includes(normalized)) {
+      handleCancelWorking(from, state);
+      return;
+    }
     if (state.queue.length >= MAX_QUEUE_DEPTH) {
       console.log(`[QUEUE_FULL] ${from}`);
       return sendMessage(from, "Queue full, please wait for current tasks to finish.");
@@ -180,100 +218,212 @@ app.post("/webhook", webhookValidator, async (req, res) => {
     return sendMessage(from, "Got it, I'll process this next.");
   }
 
-  state.busy = true; // Synchronous — before any await
+  // --- State: idle — process the command ---
+  state.state = "working";
   try {
     await processCommand(from, body, state);
   } catch (err) {
-    // Safety net — ensure busy flag is always cleared
-    state.busy = false;
+    // Safety net — ensure state is always reset
+    state.state = "idle";
     state.queue.length = 0;
     console.error(`[FATAL] ${from}: unhandled error in processCommand: ${err.message}`);
   }
 });
 
-// --- Forward to VM and process queue ---
-async function processCommand(from, text, state) {
-  let current = text;
-  while (current) {
-    try {
-      console.log(`[FORWARD] ${from}: ${current.substring(0, 80)}`);
-      const data = await forwardToVM(current);
+// --- Send VM response to WhatsApp (shared formatting logic) ---
+async function sendVMResponse(from, data) {
+  const mediaUrls = (data.images || []).map((img) => `${PUBLIC_URL}${img.url}`);
 
-      // Construct public media URLs from images array
-      const mediaUrls = (data.images || []).map((img) => `${PUBLIC_URL}${img.url}`);
+  if (data.text || data.diffs) {
+    let responseText = data.text || "";
+    const diffs = data.diffs;
+    const diffSummary = data.diffSummary;
 
-      console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
+    if (responseText.length <= MAX_MSG && diffs) {
+      const diffBudget = MAX_MSG - responseText.length;
+      const diffFormatted = formatDiffMessage(diffs, diffSummary, diffBudget);
 
-      if (data.text || data.diffs) {
-        let responseText = data.text || "";
-        const diffs = data.diffs;
-        const diffSummary = data.diffSummary;
-
-        if (responseText.length <= MAX_MSG && diffs) {
-          const diffBudget = MAX_MSG - responseText.length;
-          const diffFormatted = formatDiffMessage(diffs, diffSummary, diffBudget);
-
-          if (diffFormatted && responseText.length + diffFormatted.length <= MAX_MSG) {
-            responseText += diffFormatted;
-          } else if (diffFormatted) {
-            const truncatedResponse = responseText.length > MAX_MSG
-              ? responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]"
-              : responseText;
-            await sendMessage(from, truncatedResponse, mediaUrls);
-            const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
-            if (overflowDiff) {
-              await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
-            }
-            continue;
-          }
+      if (diffFormatted && responseText.length + diffFormatted.length <= MAX_MSG) {
+        responseText += diffFormatted;
+      } else if (diffFormatted) {
+        const truncatedResponse = responseText.length > MAX_MSG
+          ? responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]"
+          : responseText;
+        await sendMessage(from, truncatedResponse, mediaUrls);
+        const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
+        if (overflowDiff) {
+          await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
         }
-
-        if (responseText.length > MAX_MSG) {
-          responseText = responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]";
-          await sendMessage(from, responseText, mediaUrls);
-          if (diffs) {
-            const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
-            if (overflowDiff) {
-              await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
-            }
-          }
-          continue;
-        }
-
-        await sendMessage(from, responseText, mediaUrls);
-      } else if (mediaUrls.length > 0) {
-        await sendMessage(from, "Here's a screenshot:", mediaUrls);
-      } else {
-        await sendMessage(from, "Claude returned an empty response.");
-      }
-    } catch (err) {
-      console.error(`[ERROR] ${from}: ${err.message}`);
-      const message =
-        err.status === 400
-          ? "I couldn't process that message. Try rephrasing."
-          : err.status === 408
-            ? "That took too long. Try a simpler request."
-            : "Something went wrong. Try again in a moment.";
-      await sendMessage(from, message);
-
-      // Send diffs from error/timeout responses (Claude may have modified files before failing)
-      if (err.data?.diffs) {
-        const errorDiff = formatDiffMessage(err.data.diffs, err.data.diffSummary, MAX_MSG);
-        if (errorDiff) {
-          await sendMessage(from, errorDiff.substring(0, MAX_MSG));
-        }
+        return;
       }
     }
 
-    // Dequeue next message or mark idle
-    if (state.queue.length > 0) {
-      current = state.queue.shift();
-      console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
-    } else {
-      current = null;
+    if (responseText.length > MAX_MSG) {
+      responseText = responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]";
+      await sendMessage(from, responseText, mediaUrls);
+      if (diffs) {
+        const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
+        if (overflowDiff) {
+          await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
+        }
+      }
+      return;
+    }
+
+    await sendMessage(from, responseText, mediaUrls);
+  } else if (mediaUrls.length > 0) {
+    await sendMessage(from, "Here's a screenshot:", mediaUrls);
+  } else {
+    await sendMessage(from, "Claude returned an empty response.");
+  }
+}
+
+// --- Process a single command ---
+async function processCommand(from, text, state) {
+  try {
+    console.log(`[FORWARD] ${from}: ${text.substring(0, 80)}`);
+    const data = await forwardToVM(text, from, state);
+
+    console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode})`);
+
+    // Approval flow — transition to awaiting_approval
+    if (data.approvalRequired) {
+      state.state = "awaiting_approval";
+      state.approvalTimer = setTimeout(() => {
+        state.state = "idle";
+        state.approvalTimer = null;
+        sendMessage(from, "Approval timed out (30 min). Changes preserved on disk.");
+      }, APPROVAL_TIMEOUT_MS);
+
+      const mediaUrls = (data.images || []).map((img) => `${PUBLIC_URL}${img.url}`);
+      await sendMessage(from, formatApprovalPrompt(data), mediaUrls);
+      return; // Don't process queue — waiting for user response
+    }
+
+    // Normal completion — send response and process queue
+    await sendVMResponse(from, data);
+  } catch (err) {
+    console.error(`[ERROR] ${from}: ${err.message}`);
+    const message =
+      err.status === 400
+        ? "I couldn't process that message. Try rephrasing."
+        : err.status === 408
+          ? "That took too long. Try a simpler request."
+          : "Something went wrong. Try again in a moment.";
+    await sendMessage(from, message);
+
+    // Send diffs from error/timeout responses (Claude may have modified files before failing)
+    if (err.data?.diffs) {
+      const errorDiff = formatDiffMessage(err.data.diffs, err.data.diffSummary, MAX_MSG);
+      if (errorDiff) {
+        await sendMessage(from, errorDiff.substring(0, MAX_MSG));
+      }
     }
   }
-  state.busy = false;
+
+  processQueue(from, state);
+}
+
+// --- Process queued messages ---
+function processQueue(from, state) {
+  if (state.queue.length > 0) {
+    const next = state.queue.shift();
+    console.log(`[DEQUEUED] ${from} (remaining: ${state.queue.length})`);
+    processCommand(from, next, state);
+  } else {
+    state.state = "idle";
+  }
+}
+
+// --- Approval handlers ---
+async function handleApprove(from, state) {
+  clearTimeout(state.approvalTimer);
+  state.state = "working";
+  state.approvalTimer = null;
+
+  try {
+    const response = await fetch(`${CLAUDE_HOST}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved: true }),
+    });
+    const data = await response.json();
+
+    if (data.prUrl) {
+      await sendMessage(from, `PR created: ${data.prUrl}`);
+    } else {
+      await sendMessage(from, data.text || "Approved.");
+    }
+  } catch (err) {
+    console.error(`[APPROVE_ERR] ${from}: ${err.message}`);
+    await sendMessage(from, `Failed to create PR: ${err.message}\nReply *approve* to retry.`);
+    state.state = "awaiting_approval";
+    state.approvalTimer = setTimeout(() => {
+      state.state = "idle";
+      state.approvalTimer = null;
+      sendMessage(from, "Approval timed out.");
+    }, APPROVAL_TIMEOUT_MS);
+    return;
+  }
+
+  state.state = "idle";
+  processQueue(from, state);
+}
+
+async function handleReject(from, state) {
+  clearTimeout(state.approvalTimer);
+  state.state = "working";
+  state.approvalTimer = null;
+
+  try {
+    await fetch(`${CLAUDE_HOST}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved: false }),
+    });
+    await sendMessage(from, "Changes reverted. Ready for next command.");
+  } catch (err) {
+    console.error(`[REJECT_ERR] ${from}: ${err.message}`);
+    await sendMessage(from, `Failed to revert: ${err.message}. Changes may still be on disk.`);
+  }
+
+  state.state = "idle";
+  state.queue.length = 0;
+}
+
+async function handleCancel(from, state) {
+  clearTimeout(state.approvalTimer);
+  state.approvalTimer = null;
+
+  // In awaiting_approval, cancel acts like reject
+  try {
+    await fetch(`${CLAUDE_HOST}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved: false }),
+    });
+  } catch (_) { /* best effort */ }
+
+  state.state = "idle";
+  state.queue.length = 0;
+  await sendMessage(from, "Cancelled. Changes reverted. Ready for next command.");
+}
+
+async function handleCancelWorking(from, state) {
+  // Abort the in-flight fetch
+  if (state.abortController) {
+    state.abortController.abort();
+  }
+
+  // Tell VM to kill the process
+  try {
+    await fetch(`${CLAUDE_HOST}/cancel`, { method: "POST" });
+  } catch (_) { /* VM may already be done */ }
+
+  state.state = "idle";
+  state.queue.length = 0;
+  state.abortController = null;
+  await sendMessage(from, "Cancelled. Ready for next command.");
 }
 
 // --- HTTP to VM with timeout + cold-start retry ---
