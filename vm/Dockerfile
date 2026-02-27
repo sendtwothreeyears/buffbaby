@@ -25,11 +25,13 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install Claude Code CLI and Playwright CLI globally
 RUN npm install -g @anthropic-ai/claude-code playwright
 
-# Install only Chromium for Playwright (not Firefox/WebKit)
-RUN npx playwright install chromium
-
 # Create non-root user (Claude Code refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash appuser
+
+# Install Playwright Chromium as appuser so the binary lands in ~appuser/.cache
+USER appuser
+RUN npx playwright install chromium
+USER root
 
 WORKDIR /app
 

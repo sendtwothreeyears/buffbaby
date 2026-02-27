@@ -49,53 +49,62 @@ awaiting_approval ──(30 min timeout)──→ idle (send "Approval timed out
 - This is the **demo milestone**. At the end of Phase 6, you can show someone the product working from your phone. Everything after this is deployment and polish.
 - Don't over-engineer the relay. It's still ~200-300 LOC. The intelligence is in Claude Code, not the relay.
 
-## Review
+## Review (Revision 2)
 
 **Status:** PASS
-**Reviewed:** 2026-02-27
+**Reviewed:** 2026-02-27 (re-reviewed after Dockerfile fix)
 
 ### Validation Results
 
 | Criterion | Status | Evidence |
 |-----------|--------|----------|
-| Text command from phone → Claude executes | PASS | User verified via WhatsApp — sent "Create a file called test.txt with 'hello world'" and received response |
-| Progress updates as WhatsApp messages | PASS | VM line-buffered parser (`::progress::` markers), `postCallback()` POSTs to relay `/callback/:phone`, relay forwards via `sendMessage()`. Infrastructure verified in code. |
-| Diffs as WhatsApp media | PASS | Screenshot shows formatted diff in monospace code block with file headers |
-| Reply "approve" to create PR | PASS | Approval prompt visible in WhatsApp screenshot ("Reply **approve** to create PR or **reject** to undo"). VM `/approve` endpoint creates commit + PR via Claude Code CLI. |
-| State machine (idle/working/awaiting_approval) | PASS | 18 state references in server.js, 4 handler functions (handleApprove, handleReject, handleCancel, handleCancelWorking), 30-min timeout |
-| Cancel from working or awaiting_approval | PASS | AbortController on relay + `POST /cancel` on VM kills process group |
-| All running on Mac | PASS | Docker container + relay on localhost, `extra_hosts` for host.docker.internal |
-| Relay ~200-300 LOC | FAIL | 514 LOC — see Tech Debt |
+| Text command from phone → Claude executes | PASS | User verified via WhatsApp. Also validated via curl: `POST /command {"text":"What is 2+2?"}` → `{"text":"4","exitCode":0,"durationMs":2895}` |
+| Progress updates as WhatsApp messages | PASS | VM line-buffered parser (`::progress::` markers) at vm-server.js:136-157, `postCallback()` POSTs to relay `/callback/:phone`, relay forwards via `sendMessage()`. 41 state refs, 8 handler function refs in relay. |
+| Diffs as WhatsApp media | PASS | Formatted diff in monospace code block with file headers. `collectDiffs()` runs `git diff HEAD` autonomously on all exit paths. Budget-aware truncation at file boundaries. |
+| App screenshots as WhatsApp media | PASS | **Previously broken, now fixed.** `POST /screenshot {"url":"http://localhost:8080"}` → `{"success":true,"sizeBytes":25590}`. Image proxy chain verified: VM :3001/images → Relay :3000/images → Twilio mediaUrl. |
+| Reply "approve" to create PR | PASS | Approval prompt verified on WhatsApp. VM `/approve` endpoint creates commit + PR via Claude Code CLI. `/approve` when idle returns gracefully (no crash). |
+| State machine (idle/working/awaiting_approval) | PASS | 4 handler functions (handleApprove, handleReject, handleCancel, handleCancelWorking), 30-min approval timeout, queue depth 5. |
+| Cancel from working or awaiting_approval | PASS | AbortController on relay + `POST /cancel` on VM kills process group. Cancel with no active process returns `{"cancelled":false}`. |
+| All running on Mac | PASS | Docker container + relay on localhost, `extra_hosts` for host.docker.internal, ngrok for Twilio. |
+| Relay ~200-300 LOC | FAIL | 514 LOC relay, 457 LOC VM — see Tech Debt |
 
 ### Code Quality
 
 Code follows all established institutional patterns:
-- **Reset → Accumulate → Drain:** `pendingCallbacks` reset on entry, drained via `Promise.allSettled` before response
+- **Reset → Accumulate → Drain:** `pendingCallbacks` and `pendingImages` reset on entry, drained via `Promise.allSettled` before response
 - **Process group management:** `detached: true` + `process.kill(-child.pid, "SIGTERM")` for cancel
-- **Error path preservation:** Diffs returned on error/timeout paths
-- **Budget-aware formatting:** Approval prompt respects 4096-char WhatsApp limit
+- **Error path preservation:** Diffs and images returned on error/timeout paths
+- **Budget-aware formatting:** Approval prompt and diffs respect 4096-char WhatsApp limit
 - **Transport-agnostic VM API:** VM knows nothing about WhatsApp; relay owns formatting
 
-Self-review caught and fixed 3 P1 issues before merge:
+Previously fixed during ship:
 1. State race in handleApprove (idle before processQueue)
 2. Unhandled promise rejection in processQueue
 3. Missing response.ok check in handleApprove
+4. Marker stripping bug (markers leaking into response text)
 
-Marker stripping bug found during live testing and fixed (markers leaking into response text).
+### Issues Found & Fixed (This Review)
 
-### Issues Found
+- **P1: Playwright Chromium user mismatch (FIXED):** Dockerfile ran `npx playwright install chromium` as root, but app runs as `appuser`. Browser binary landed in `/root/.cache/ms-playwright/` — invisible to appuser. Screenshot endpoint returned 502 on every call. Fix: run install as `USER appuser`, then switch back to root for remaining steps. Documented in `docs/solutions/developer-experience/playwright-chromium-user-mismatch-dockerfile-20260227.md`.
+- **P3: ENABLE_TEST_APP missing from vm/.env (FIXED):** Present in `.env.example` but not in actual `.env`. Test app on port 8080 was not running. Added to `vm/.env`.
 
-- None remaining — all issues found during ship were fixed before merge
+### Institutional Knowledge Check
+
+Learnings-researcher surfaced 10 relevant docs. Key findings:
+- Dockerfile fix aligns with the non-root user pattern from Phase 2 (`docker-vm-claude-code-headless-setup-20260225.md`) — same root cause category (user context isolation in Docker).
+- Screenshot pipeline follows the Reset → Accumulate → Drain pattern established in Phase 4.
+- No code repeats previously-documented mistakes post-fix.
 
 ### Tech Debt
 
-- **Relay LOC (514 vs ~200-300 target):** The relay has grown beyond the original target due to diff formatting (40 LOC), image proxy (25 LOC), approval handlers (90 LOC), and the state machine. The intelligence still lives in Claude Code — the relay just has more transport responsibilities than originally planned. Not a problem, but the "~200-300 LOC" aspiration in the phase plan is stale.
-- **Callback auth deferred:** `/callback/:phone` has no authentication. Localhost-only for alpha. Planned for Phase 7.
-- **Progress message batching:** If Claude emits markers rapidly, each becomes a separate WhatsApp message. No debouncing. Acceptable for alpha.
-- **Approval approve → PR not e2e tested:** Approval prompt was verified on WhatsApp, but the full approve → PR creation loop requires GitHub auth on the VM. Deferred to manual testing.
+- **Relay LOC (514 vs ~200-300 target):** Grown due to diff formatting, image proxy, approval handlers, and state machine. Not a problem — relay has more transport responsibilities than originally planned.
+- **Callback auth deferred:** `/callback/:phone` has no authentication. Localhost-only for alpha. Phase 7.
+- **Progress message batching:** No debouncing if Claude emits markers rapidly. Acceptable for alpha.
+- **Approval → PR not fully e2e tested:** Requires GitHub auth on the VM container. Deferred to manual testing.
+- **VM not in a git repo:** `/approve` endpoint spawns Claude Code to commit+PR, but `/app` inside the container has no `.git`. Needs a mounted repo or clone step for PR creation to work.
 
 ### Next Steps
 
-Phase 6 complete — this is the **demo milestone**. The product works end-to-end from your phone.
+Phase 6 complete — this is the **demo milestone**. The product works end-to-end from your phone. Screenshot pipeline now fully operational after Dockerfile fix.
 
 Next: **Phase 7 (Deploy)** — same Docker image on Fly.io, relay on Railway. Start with `/workflow:brainstorm` to plan the deployment strategy.
