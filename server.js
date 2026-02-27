@@ -32,6 +32,7 @@ const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json()); // for VM callbacks
 
 // --- Constants ---
 const MAX_QUEUE_DEPTH = 5;
@@ -77,6 +78,21 @@ app.get("/images/:filename", async (req, res) => {
     console.error(`[IMAGE_PROXY_ERR] ${filename}: ${err.message}`);
     res.sendStatus(502);
   }
+});
+
+// --- VM progress callback endpoint ---
+app.post("/callback/:phone", (req, res) => {
+  const phone = decodeURIComponent(req.params.phone);
+  const { type, message } = req.body;
+
+  if (type === "progress" && message) {
+    const truncated = message.length > MAX_MSG
+      ? message.slice(0, MAX_MSG - 20) + "\n[truncated]"
+      : message;
+    sendMessage(phone, truncated);
+  }
+
+  res.sendStatus(200);
 });
 
 // --- Twilio webhook signature validation ---
@@ -261,28 +277,26 @@ async function processCommand(from, text, state) {
 }
 
 // --- HTTP to VM with timeout + cold-start retry ---
-async function forwardToVM(text) {
+async function forwardToVM(text, from, state) {
+  const controller = new AbortController();
+  if (state) state.abortController = controller;
+  const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+
   const doFetch = async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${CLAUDE_HOST}/command`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-        signal: controller.signal,
+    const res = await fetch(`${CLAUDE_HOST}/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, callbackPhone: from }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
+        status: res.status,
+        data: errBody,
       });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw Object.assign(new Error(errBody.error || `VM returned ${res.status}`), {
-          status: res.status,
-          data: errBody,
-        });
-      }
-      return await res.json();
-    } finally {
-      clearTimeout(timeout);
     }
+    return await res.json();
   };
 
   try {
@@ -295,6 +309,9 @@ async function forwardToVM(text) {
       return await doFetch();
     }
     throw err;
+  } finally {
+    clearTimeout(timeout);
+    if (state) state.abortController = null;
   }
 }
 

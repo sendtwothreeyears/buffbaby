@@ -5,7 +5,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const { chromium } = require("playwright");
 
-const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP } = process.env;
+const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP, RELAY_CALLBACK_URL = "" } = process.env;
 
 // Fail-fast env var validation
 if (!ANTHROPIC_API_KEY) {
@@ -70,9 +70,22 @@ function collectDiffs() {
   }
 }
 
+// POST progress callbacks to relay during command execution
+const pendingCallbacks = [];
+
+async function postCallback(phone, payload) {
+  const url = `${RELAY_CALLBACK_URL}/callback/${encodeURIComponent(phone)}`;
+  const promise = fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch((err) => console.error(`[CALLBACK] Failed: ${err.message}`));
+  pendingCallbacks.push(promise);
+}
+
 // POST /command — run a prompt through Claude Code
 app.post("/command", (req, res) => {
-  const { text } = req.body || {};
+  const { text, callbackPhone } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({
       error: "bad_request",
@@ -88,10 +101,12 @@ app.post("/command", (req, res) => {
 
   busy = true;
   pendingImages = [];
+  pendingCallbacks.length = 0;
   lastActivity = Date.now();
   const start = Date.now();
   const stdoutChunks = [];
   const stderrChunks = [];
+  let approvalRequested = false;
 
   const child = spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"], {
     detached: true,
@@ -118,9 +133,27 @@ app.post("/command", (req, res) => {
   child.stdin.write(text);
   child.stdin.end();
 
+  // Line-buffered stdout parser for ::progress:: and ::approval:: markers
+  let lineBuf = "";
+
   child.stdout.on("data", (chunk) => {
     stdoutBytes += chunk.length;
     if (stdoutBytes <= MAX_OUTPUT_BYTES) stdoutChunks.push(chunk);
+
+    // Parse markers from stdout lines
+    lineBuf += chunk.toString();
+    const lines = lineBuf.split("\n");
+    lineBuf = lines.pop(); // keep incomplete last line in buffer
+
+    for (const line of lines) {
+      if (line.match(/^::approval::/)) {
+        approvalRequested = true;
+      }
+      const progressMatch = line.match(/^::progress::\s*(.+)/);
+      if (progressMatch && RELAY_CALLBACK_URL && callbackPhone) {
+        postCallback(callbackPhone, { type: "progress", message: progressMatch[1] });
+      }
+    }
   });
   child.stderr.on("data", (chunk) => {
     stderrBytes += chunk.length;
@@ -149,6 +182,10 @@ app.post("/command", (req, res) => {
     const stderrOut = Buffer.concat(stderrChunks).toString();
 
     try {
+      // Ensure all progress callbacks have been delivered before responding
+      await Promise.allSettled(pendingCallbacks);
+      pendingCallbacks.length = 0;
+
       const diffResult = collectDiffs();
 
       if (timedOut) {
@@ -190,6 +227,7 @@ app.post("/command", (req, res) => {
         images,
         diffs: diffResult?.diff || undefined,
         diffSummary: diffResult?.summary || undefined,
+        approvalRequired: approvalRequested && code === 0,
         exitCode: 0,
         durationMs,
       });
@@ -262,6 +300,84 @@ app.post("/screenshot", async (req, res) => {
     res.status(502).json({ success: false, error: err.message });
   } finally {
     if (browser) await browser.close();
+  }
+});
+
+// POST /approve — create PR or revert changes
+app.post("/approve", async (req, res) => {
+  const { approved } = req.body || {};
+
+  if (busy) {
+    return res.status(409).json({ error: "busy" });
+  }
+
+  busy = true;
+  lastActivity = Date.now();
+
+  try {
+    if (approved) {
+      const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      activeChild = child;
+
+      child.stdin.write("Create a git commit for all current changes and push a PR using `gh pr create`. Use a descriptive title based on the changes.");
+      child.stdin.end();
+
+      const stdoutChunks = [];
+      child.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
+      child.stderr.on("data", () => {}); // discard stderr
+
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          try { process.kill(-child.pid, "SIGTERM"); } catch (_) {}
+          reject(new Error("Approve command timed out"));
+        }, TIMEOUT);
+
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          if (code !== 0) reject(new Error(`Approve exited with code ${code}`));
+          else resolve();
+        });
+        child.on("error", (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+
+      const stdout = Buffer.concat(stdoutChunks).toString();
+      const prUrlMatch = stdout.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+
+      console.log(`[APPROVE] PR created: ${prUrlMatch ? prUrlMatch[0] : "URL not found"}`);
+      res.json({
+        text: stdout,
+        prUrl: prUrlMatch ? prUrlMatch[0] : null,
+      });
+    } else {
+      execSync("git checkout . && git clean -fd", { cwd: process.cwd(), timeout: 5000 });
+      console.log("[REJECT] Changes reverted");
+      res.json({ text: "Changes reverted." });
+    }
+  } catch (err) {
+    console.error(`[APPROVE_ERR] ${err.message}`);
+    res.status(500).json({ error: "approve_failed", message: err.message });
+  } finally {
+    busy = false;
+    activeChild = null;
+  }
+});
+
+// POST /cancel — kill the active Claude Code process
+app.post("/cancel", (_req, res) => {
+  if (activeChild) {
+    try {
+      process.kill(-activeChild.pid, "SIGTERM");
+    } catch (_) { /* already dead */ }
+    console.log(`[CANCEL] Killed PID ${activeChild.pid}`);
+    res.json({ cancelled: true });
+  } else {
+    res.json({ cancelled: false, message: "no active process" });
   }
 });
 
