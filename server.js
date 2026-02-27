@@ -84,6 +84,48 @@ const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
   url: PUBLIC_URL + "/webhook",
 });
 
+// --- Diff formatting for WhatsApp ---
+const MAX_MSG = 4096;
+
+function truncateAtFileBoundary(diff, maxChars) {
+  const FILE_HEADER = "diff --git ";
+  const files = diff.split(FILE_HEADER).filter(Boolean);
+
+  let result = "";
+  let includedFiles = 0;
+
+  for (const file of files) {
+    const entry = FILE_HEADER + file;
+    if (result.length + entry.length > maxChars) break;
+    result += entry;
+    includedFiles++;
+  }
+
+  return result || diff.substring(0, maxChars);
+}
+
+function formatDiffMessage(diffs, diffSummary, budget) {
+  if (!diffs) return null;
+
+  const SEPARATOR = "\n\n--- Changes ---\n";
+  const CODE_OPEN = "```\n";
+  const CODE_CLOSE = "\n```";
+  const OVERHEAD = SEPARATOR.length + CODE_OPEN.length + CODE_CLOSE.length;
+  const TRUNCATION_RESERVE = 60;
+  const availableBudget = budget - OVERHEAD - TRUNCATION_RESERVE;
+
+  if (availableBudget <= 0) return null;
+
+  if (diffs.length <= availableBudget) {
+    return SEPARATOR + CODE_OPEN + diffs + CODE_CLOSE;
+  }
+
+  const truncatedDiff = truncateAtFileBoundary(diffs, availableBudget);
+  const summaryText = diffSummary ? `\n${diffSummary}` : "";
+
+  return SEPARATOR + CODE_OPEN + truncatedDiff + CODE_CLOSE + summaryText;
+}
+
 // --- Core WhatsApp handler ---
 app.post("/webhook", webhookValidator, async (req, res) => {
   const from = req.body.From;
@@ -146,13 +188,45 @@ async function processCommand(from, text, state) {
       // Construct public media URLs from images array
       const mediaUrls = (data.images || []).map((img) => `${PUBLIC_URL}${img.url}`);
 
-      if (data.text) {
-        const response =
-          data.text.length > 4096
-            ? data.text.substring(0, 4096) + "\n\n[Response truncated]"
-            : data.text;
-        console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
-        await sendMessage(from, response, mediaUrls);
+      console.log(`[RESPONSE] ${from} (${data.durationMs}ms, exit ${data.exitCode}, ${mediaUrls.length} image(s))`);
+
+      if (data.text || data.diffs) {
+        let responseText = data.text || "";
+        const diffs = data.diffs;
+        const diffSummary = data.diffSummary;
+
+        if (responseText.length <= MAX_MSG && diffs) {
+          const diffBudget = MAX_MSG - responseText.length;
+          const diffFormatted = formatDiffMessage(diffs, diffSummary, diffBudget);
+
+          if (diffFormatted && responseText.length + diffFormatted.length <= MAX_MSG) {
+            responseText += diffFormatted;
+          } else if (diffFormatted) {
+            const truncatedResponse = responseText.length > MAX_MSG
+              ? responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]"
+              : responseText;
+            await sendMessage(from, truncatedResponse, mediaUrls);
+            const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
+            if (overflowDiff) {
+              await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
+            }
+            continue;
+          }
+        }
+
+        if (responseText.length > MAX_MSG) {
+          responseText = responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]";
+          await sendMessage(from, responseText, mediaUrls);
+          if (diffs) {
+            const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
+            if (overflowDiff) {
+              await sendMessage(from, overflowDiff.substring(0, MAX_MSG));
+            }
+          }
+          continue;
+        }
+
+        await sendMessage(from, responseText, mediaUrls);
       } else if (mediaUrls.length > 0) {
         await sendMessage(from, "Here's a screenshot:", mediaUrls);
       } else {
