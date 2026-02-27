@@ -282,10 +282,6 @@ textslash/
 │   ├── setup.sh           # Self-hosted provisioning script
 │   └── teardown.sh        # Destroy a self-hosted deployment
 │
-├── .github/
-│   └── workflows/
-│       └── publish-images.yml  # Build + push Docker images to GHCR
-│
 ├── docs/
 │   ├── PRD_WHATSAPP_AGENTIC_COCKPIT.md   # Full product spec
 │   ├── competitive-analysis.md            # vs the field
@@ -323,7 +319,7 @@ The script will:
 1. Check that `flyctl` is installed and you're logged in
 2. Ask for your app name prefix (e.g., `myname` → `myname-relay`, `myname-vm`)
 3. Ask for your Fly.io org, region, and credentials
-4. Create both Fly.io apps, set encrypted secrets, and deploy from pre-built Docker images
+4. Create both Fly.io apps, set encrypted secrets, and deploy (builds from Dockerfiles on Fly.io)
 5. Wait for the relay to become healthy
 6. Print next steps (configure Twilio webhook URL)
 

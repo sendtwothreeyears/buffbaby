@@ -2,9 +2,8 @@
 set -euo pipefail
 
 # textslash self-hosted setup script
-# Deploys a relay + VM to your own Fly.io account from pre-built GHCR images.
+# Deploys a relay + VM to your own Fly.io account.
 
-GHCR_ORG="sendtwothreeyears"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -142,18 +141,18 @@ if [ -n "$GITHUB_TOKEN" ]; then
 fi
 fly secrets set "${VM_SECRETS[@]}" --app "${PREFIX}-vm"
 
-# ─── 7. Deploy from GHCR images ──────────────────────────────────────────────
+# ─── 7. Deploy from local Dockerfiles ─────────────────────────────────────────
 
-echo "Deploying relay..."
+echo "Deploying relay (building from Dockerfile)..."
 fly deploy --app "${PREFIX}-relay" \
   --config "${REPO_DIR}/deploy/relay.fly.toml" \
-  --image "ghcr.io/${GHCR_ORG}/textslash-relay:latest" \
+  --dockerfile "${REPO_DIR}/Dockerfile" \
   --region "$REGION" --ha=false
 
-echo "Deploying VM..."
+echo "Deploying VM (building from vm/Dockerfile — this may take a few minutes)..."
 fly deploy --app "${PREFIX}-vm" \
   --config "${REPO_DIR}/deploy/vm.fly.toml" \
-  --image "ghcr.io/${GHCR_ORG}/textslash-vm:latest" \
+  --dockerfile "${REPO_DIR}/vm/Dockerfile" \
   --region "$REGION" --ha=false
 
 # ─── 8. Scale to 1 machine (belt-and-suspenders for HA default) ──────────────
