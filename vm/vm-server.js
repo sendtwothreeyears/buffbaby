@@ -178,8 +178,15 @@ app.post("/command", (req, res) => {
     clearTimeout(timer);
     lastActivity = Date.now();
     const durationMs = Date.now() - start;
-    const textOut = Buffer.concat(stdoutChunks).toString();
+    const rawOut = Buffer.concat(stdoutChunks).toString();
     const stderrOut = Buffer.concat(stderrChunks).toString();
+
+    // Strip ::progress:: and ::approval:: markers from output sent to user
+    const textOut = rawOut
+      .split("\n")
+      .filter((line) => !line.match(/^::progress::\s/) && !line.match(/^::approval::/))
+      .join("\n")
+      .trim();
 
     try {
       // Ensure all progress callbacks have been delivered before responding
