@@ -274,6 +274,18 @@ textslash/
 │   ├── CLAUDE.md          # VM-specific instructions
 │   └── .env.example       # VM env template
 │
+├── deploy/
+│   ├── relay.fly.toml     # Template fly.toml for self-hosted relay
+│   └── vm.fly.toml        # Template fly.toml for self-hosted VM
+│
+├── scripts/
+│   ├── setup.sh           # Self-hosted provisioning script
+│   └── teardown.sh        # Destroy a self-hosted deployment
+│
+├── .github/
+│   └── workflows/
+│       └── publish-images.yml  # Build + push Docker images to GHCR
+│
 ├── docs/
 │   ├── PRD_WHATSAPP_AGENTIC_COCKPIT.md   # Full product spec
 │   ├── competitive-analysis.md            # vs the field
@@ -283,6 +295,71 @@ textslash/
     ├── skills/            # Claude Code skills (20 skills)
     └── subagents/         # Shared research agents
 ```
+
+---
+
+## Self-Hosting
+
+Deploy your own textslash instance to your Fly.io account. You'll get your own relay server and VM, fully independent.
+
+### Prerequisites
+
+| Requirement | How to Get It |
+|-------------|---------------|
+| **Fly.io account** | [Sign up](https://fly.io) (free tier available) |
+| **flyctl CLI** | [Install](https://fly.io/docs/flyctl/install/) and `fly auth login` |
+| **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com) |
+| **Twilio account** | [twilio.com](https://www.twilio.com) — WhatsApp Sandbox works for dev |
+| **Git + this repo cloned** | `git clone https://github.com/sendtwothreeyears/ts.git textslash` |
+
+### Quick Start
+
+```bash
+cd textslash
+./scripts/setup.sh
+```
+
+The script will:
+1. Check that `flyctl` is installed and you're logged in
+2. Ask for your app name prefix (e.g., `myname` → `myname-relay`, `myname-vm`)
+3. Ask for your Fly.io org, region, and credentials
+4. Create both Fly.io apps, set encrypted secrets, and deploy from pre-built Docker images
+5. Wait for the relay to become healthy
+6. Print next steps (configure Twilio webhook URL)
+
+**Estimated cost:** ~$15-20/month on Fly.io (shared-cpu VMs + 3GB volume).
+
+### Configure Twilio
+
+After setup completes, point your Twilio webhook to your relay:
+
+1. Go to [Twilio Console → WhatsApp Sandbox](https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn) (or your WhatsApp Business number settings)
+2. Set the webhook URL to: `https://{prefix}-relay.fly.dev/webhook`
+3. If using the Sandbox, send the join code to the sandbox number first
+
+### Teardown
+
+```bash
+./scripts/teardown.sh
+```
+
+Destroys both apps and all associated data. This is irreversible.
+
+### Configuration Reference
+
+Secrets are set via `fly secrets set` (encrypted at rest). See `.env.example` and `vm/.env.example` for the full list of environment variables.
+
+| Secret | Set On | Purpose |
+|--------|--------|---------|
+| `TWILIO_ACCOUNT_SID` | Relay | Twilio authentication |
+| `TWILIO_AUTH_TOKEN` | Relay | Twilio authentication |
+| `TWILIO_WHATSAPP_NUMBER` | Relay | Your Twilio WhatsApp number |
+| `ALLOWED_PHONE_NUMBERS` | Relay | Comma-separated phone numbers allowed to use the system |
+| `CLAUDE_HOST` | Relay | Internal URL to VM (`http://{prefix}-vm.flycast`) |
+| `PUBLIC_URL` | Relay | Public relay URL for image proxying |
+| `ANTHROPIC_API_KEY` | VM | Claude API key |
+| `RELAY_CALLBACK_URL` | VM | Internal URL to relay for callbacks (`http://{prefix}-relay.flycast`) |
+| `GITHUB_TOKEN` | VM | (Optional) GitHub access token |
 
 ---
 

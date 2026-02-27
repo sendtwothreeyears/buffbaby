@@ -1,0 +1,35 @@
+# Template fly.toml for the VM server.
+# Used by scripts/setup.sh with: fly deploy --config deploy/vm.fly.toml --app {prefix}-vm
+# The --app flag overrides the app name below.
+
+app = "textslash-vm"
+primary_region = "ord"
+
+[env]
+  PORT = "3001"
+  IMAGES_DIR = "/data/images"
+  IDLE_TIMEOUT_MS = "3600000"
+  ENABLE_TEST_APP = "false"
+
+[http_service]
+  internal_port = 3001
+  force_https = false
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[checks]
+  [checks.health]
+    port = 3001
+    type = "http"
+    interval = "30s"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+
+[mounts]
+  source = "vm_data"
+  destination = "/data"

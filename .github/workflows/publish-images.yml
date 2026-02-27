@@ -1,0 +1,32 @@
+name: Publish Docker Images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image:
+          - { name: relay, context: "." }
+          - { name: vm, context: "./vm" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.image.context }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/textslash-${{ matrix.image.name }}:latest
+            ghcr.io/${{ github.repository_owner }}/textslash-${{ matrix.image.name }}:${{ github.sha }}

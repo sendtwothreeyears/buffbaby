@@ -1,0 +1,20 @@
+# Template fly.toml for the relay server.
+# Used by scripts/setup.sh with: fly deploy --config deploy/relay.fly.toml --app {prefix}-relay
+# The --app flag overrides the app name below.
+
+app = "textslash-relay"
+primary_region = "ord"
+
+[env]
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
