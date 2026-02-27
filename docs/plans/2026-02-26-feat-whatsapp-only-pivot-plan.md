@@ -344,14 +344,14 @@ Documented as a known limitation (not solved in this phase). Affects:
 ### Documentation
 
 - [x] PRD renamed to `PRD_WHATSAPP_AGENTIC_COCKPIT.md` with full rewrite
-- [ ] All 6 PRD cross-references updated to new filename
-- [ ] README.md fully rewritten for WhatsApp-only
-- [ ] CLAUDE.md updated — title, thesis, constraints section, architecture
-- [ ] ARCHITECTURE.md — SMS paths removed, WhatsApp-only framing, 24h window documented
-- [ ] Phase overview (00) — WhatsApp terminology, Phase 4.2 added, deferred list updated
+- [x] All 6 PRD cross-references updated to new filename
+- [x] README.md fully rewritten for WhatsApp-only
+- [x] CLAUDE.md updated — title, thesis, constraints section, architecture
+- [x] ARCHITECTURE.md — SMS paths removed, WhatsApp-only framing, 24h window documented
+- [x] Phase overview (00) — WhatsApp terminology, Phase 4.2 added, deferred list updated
 - [ ] Phase 5 (Diffs) — restructured to text-first monospace, PNG deferred
-- [ ] Phase 11 (Beta) — graduation criteria WhatsApp-only, MMS tasks removed, budget updated
-- [ ] Competitive analysis — repositioned for WhatsApp differentiation
+- [x] Phase 11 (Beta) — graduation criteria WhatsApp-only, MMS tasks removed, budget updated
+- [x] Competitive analysis — repositioned for WhatsApp differentiation
 - [ ] All Tier 3 and Tier 4 files updated
 
 ### Verification

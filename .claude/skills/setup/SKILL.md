@@ -36,7 +36,7 @@ cp .env.example .env
 Ask for:
 1. **Twilio Account SID** — "Find this at https://console.twilio.com (starts with AC)"
 2. **Twilio Auth Token** — "Same page, under Account SID"
-3. **Twilio Phone Number** — "Your SMS-capable Twilio number in E.164 format (+1XXXXXXXXXX)"
+3. **Twilio WhatsApp Number** — "Your Twilio WhatsApp Sandbox number (e.g., +14155238886). See https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
 4. **Allowed Phone Numbers** — "Comma-separated E.164 numbers that can send commands"
 
 Validate formats:
@@ -90,29 +90,29 @@ Ask them to paste the ngrok HTTPS URL. Then:
 1. Update `PUBLIC_URL` in `.env` with the ngrok URL
 2. Remind them to restart the relay server after updating `.env`
 
-### 6. Configure Twilio Webhook
+### 6. Configure Twilio WhatsApp Webhook
 
 Guide to Twilio console:
-1. Go to https://console.twilio.com/us1/develop/phone-numbers/manage/incoming
-2. Click the phone number
-3. Under Messaging → "A message comes in", set webhook to `<PUBLIC_URL>/sms`
-4. Method: HTTP POST
-5. Save
+1. Go to https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn
+2. Under "Sandbox Configuration", set the webhook URL to `<PUBLIC_URL>/webhook`
+3. Method: HTTP POST
+4. Save
+5. Note the sandbox join code (e.g., "join word-word") — users must send this to the sandbox number to opt in
 
 ### 7. Verify End-to-End
 
-"Send a text message to your Twilio number now."
+"Send a WhatsApp message to the sandbox number now. First send the join code, then send any message."
 
 Check relay logs for:
 - `[INBOUND] From: +1... Body: ...`
 - `[OUTBOUND] Echo sent to +1...`
 
-If the user receives an echo + test image: "Setup complete! You're ready to go."
+If the user receives a response: "Setup complete! You're ready to go."
 
 ### Important Warnings
 
 Display these prominently:
 
-**A2P 10DLC (US numbers only):** If using a US Twilio number, A2P 10DLC registration is required for reliable SMS delivery. This takes 3-15 business days. Without it, messages may be filtered by carriers. See: https://www.twilio.com/docs/messaging/guides/10dlc
+**WhatsApp Sandbox:** The Twilio WhatsApp Sandbox is free for development. Users must send the join code to the sandbox number before they can receive messages. The sandbox has a 24-hour session window — the system can only reply within 24 hours of the user's last message.
 
-**Twilio trial accounts:** Trial accounts can only send SMS to verified phone numbers. Add your phone as a verified number in the Twilio console if you're on a trial.
+**Twilio trial accounts:** Trial accounts can only send to verified phone numbers. Add your phone as a verified number in the Twilio console if you're on a trial.

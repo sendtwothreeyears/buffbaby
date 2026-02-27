@@ -12,7 +12,7 @@ Deliverables:
 - `/help` command: relay returns a static text with available commands and examples
 - `/history` command: relay returns recent session activity (last 10 commands + outcomes, stored in Supabase)
 - `/cost` command: relay returns estimated Twilio + API spend for the current billing period
-- **Composite diff images:** When > 5 files change, batch into a single grid image showing file names + change counts + miniature diff previews. Send as one MMS with "Reply 'show [filename]' for the full diff."
+- **Composite diff images:** When > 5 files change, batch into a single grid image showing file names + change counts + miniature diff previews. Send as one WhatsApp message with "Reply 'show [filename]' for the full diff."
 - "Reply 'show [filename]'" recognized by relay: fetches and sends the individual diff image for that file
 
 ## Tasks
@@ -31,5 +31,5 @@ Deliverables:
 - `/help` is static text — no external lookups needed. Just list the commands and a few example workflows.
 - `/history` requires logging command history to Supabase (may already exist from Phase 11's logging task). Query last 10 entries for the user.
 - `/cost` requires tracking: (a) Twilio message counts/costs from Phase 11's logging, and (b) estimated API spend from Claude Code usage. For V1, Twilio costs are exact (from logs) and API costs are estimated (message count × average cost per prompt).
-- Composite images reduce MMS costs and prevent thread spam. Use a grid layout: each cell shows the filename, lines changed (+/-), and a thumbnail of the diff. Rendered as a single PNG via the diff rendering pipeline from Phase 5.
+- Composite images are less critical with WhatsApp (delivers in order, per-message cost is low) but still reduce thread spam. Use a grid layout: each cell shows the filename, lines changed (+/-), and a thumbnail of the diff. Rendered as a single PNG via the diff rendering pipeline from Phase 5.
 - "Reply 'show auth.ts'" — the relay needs to map the filename to the stored individual diff image and send it. This requires keeping the individual diff images available even when a composite was sent.
