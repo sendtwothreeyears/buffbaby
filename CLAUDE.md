@@ -219,3 +219,6 @@ Keep entries concise. One line per lesson:
 - **Flycast**: Use port 80 (default), NOT the internal_port. `http://app.flycast/health` works; `http://app.flycast:3001/health` returns ECONNRESET. Fly Proxy maps port 80 → internal_port automatically.
 - **Flycast**: `.flycast` routes through Fly Proxy (enables auto-start). `.internal` goes direct to the Machine (no auto-start for stopped VMs).
 - **Twilio WhatsApp Sandbox**: 1600-char message limit (stricter than WhatsApp's 4096). Long responses must be chunked.
+- **Fly.io Volumes**: Mounting a Volume at `/data` overlays the container filesystem — directories created in the Dockerfile under `/data` are wiped. Always `mkdirSync` on startup for subdirs like `/data/images`.
+- **Fly.io deploy**: Creates 2 machines by default for HA. `min_machines_running = 1` only controls auto-stop minimum, NOT total count. For stateful single-machine apps, run `fly scale count 1` after first deploy.
+- **Flycast cold-start**: For fast-booting containers (~1-2s), Fly Proxy holds the connection and routes transparently — the relay never sees ECONNREFUSED. The retry loop is a fallback for slower starts (10s+).

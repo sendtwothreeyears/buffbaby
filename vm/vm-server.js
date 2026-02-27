@@ -32,6 +32,13 @@ const MAX_IMAGE_BYTES = 600_000;
 const JPEG_QUALITY = 75;
 const JPEG_QUALITY_FALLBACK = 50;
 
+// Ensure IMAGES_DIR exists on startup (Fly Volume mounts overlay container filesystem)
+const fsSync = require("fs");
+if (!fsSync.existsSync(IMAGES_DIR)) {
+  fsSync.mkdirSync(IMAGES_DIR, { recursive: true });
+  console.log(`[STARTUP] Created ${IMAGES_DIR}`);
+}
+
 const app = express();
 let busy = false;
 let activeChild = null;

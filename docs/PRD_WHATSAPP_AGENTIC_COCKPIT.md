@@ -875,20 +875,26 @@ _Note: This is significantly cheaper than the iMessage approach (~$700-1,400 upf
 ## Appendix
 
 ### Competitive Landscape
-- textslash's own Claude Code skills (in `.claude/skills/`) are used for development and testing
-- [Claude Code Remote Control docs](https://code.claude.com/docs/en/remote-control) — Anthropic's basic remote access feature (Feb 2026)
+
+Full competitive analysis: **[docs/competitive-analysis.md](competitive-analysis.md)** — head-to-head comparison vs Claude Code Remote Control, Claude Code on the Web, NanoClaw, and OpenClaw.
+
+**The one-liner:** Remote Control lets you check on your laptop from your phone. Claude Code on the Web lets you delegate tasks from a browser. NanoClaw and OpenClaw require you to run a server. **TextSlash replaces the laptop — text your cloud VM from WhatsApp, and the conversation thread is your project log.**
+
+**Where TextSlash wins:**
+1. No laptop, no server, no hardware of any kind — phone + WhatsApp only
+2. No new app to download — WhatsApp is already on 2B+ devices
+3. Model-agnostic — Claude + Codex + Gemini at wholesale BYOK rates, no $100-200/mo Max subscription
+4. WhatsApp thread as permanent contribution log — timestamped, searchable, never expires
+5. Visual-first review — syntax-highlighted diff PNGs, app screenshots, composite review cards
+6. Purpose-built for engineering workflows — not a general-purpose AI butler
+7. Always-on without self-hosting — cloud VM on Fly.io, no server to babysit
+
+Other competitors tracked:
 - [Kibbler](https://kibbler.dev/) — Third-party Claude Code mobile wrapper with voice + diffs (requires iOS app install)
 - [Moshi](https://getmoshi.app/) — iOS terminal with push notifications for Claude Code (requires iOS app install)
-- [OpenClaw](https://openclaw.ai/) — Open-source AI assistant with multi-channel support (WhatsApp, Telegram, Discord, Slack — all require third-party app). Could be useful for future multi-channel expansion.
 - [Claude-Code-Remote](https://github.com/) — Open source: control Claude Code via Telegram/Discord/Email (requires third-party app)
 - [Replit Mobile](https://replit.com/mobile-apps) — Closest existing product (targets non-technical audience, requires app install)
 - [v0 iOS app](https://vercel.com/blog/how-we-built-the-v0-ios-app) — Vercel's mobile companion for AI-generated UI (requires iOS app install)
-
-### Key Architectural Decision: Why Not OpenClaw?
-OpenClaw was evaluated as a potential orchestration layer. It provides multi-channel messaging, browser automation, and Claude Code integration via plugins. However:
-- **Claude Code already does everything** — the user's skills, multi-agent orchestration, Playwright MCP, git operations. OpenClaw would be a middleman adding complexity without capability.
-- **The relay is trivially simple** — ~200-300 lines of code. Not worth adding a dependency on a full orchestration platform.
-- **Future consideration:** If multi-channel expansion (Telegram, Discord, Slack) becomes a priority, OpenClaw's channel abstraction could accelerate that work. The backend is designed to be transport-agnostic.
 
 ### Research
 - [Rahul Pandita's mobile dev experiment](https://rahulpandita.me/blog/2026-01-14-Mobile-Development) — 3-week study of phone-based development (Jan 2026)
