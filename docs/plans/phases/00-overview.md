@@ -1,6 +1,6 @@
-# SMS Agentic Development Cockpit — Phase Plan
+# WhatsApp Agentic Development Cockpit — Phase Plan
 
-**Source PRD:** `PRD_SMS_AGENTIC_COCKPIT.md`
+**Source PRD:** `PRD_WHATSAPP_AGENTIC_COCKPIT.md`
 **Generated:** 2026-02-25
 **Method:** `/phase-prd`
 **Total:** 16 phases, 27 tasks
@@ -9,7 +9,7 @@
 
 ## Architectural Layers
 
-1. **Messaging layer** — Twilio SMS/MMS (inbound/outbound)
+1. **Messaging layer** — Twilio WhatsApp (inbound/outbound)
 2. **Relay layer** — thin Node.js server (webhook handler + router, ~200-300 LOC)
 3. **Compute layer** — Docker container with Claude Code CLI + Playwright
 4. **Image layer** — screenshot/diff rendering + HTTP serving from VM
@@ -20,12 +20,12 @@
 ```
 Twilio → Relay → Docker/Claude Code → Playwright → Image serving
                                                          ↓
-                                              MMS delivery back through Twilio
+                                              WhatsApp delivery back through Twilio
 ```
 
 ## Core Experience
 
-You text a command, Claude Code executes it, you get the result back as SMS/MMS. The relay is a dumb pipe — it forwards text and delivers images. All intelligence lives in Claude Code on the user's VM.
+You send a command via WhatsApp, Claude Code executes it, you get the result back as a WhatsApp message. The relay is a dumb pipe — it forwards text and delivers images. All intelligence lives in Claude Code on the user's VM.
 
 ---
 
@@ -43,20 +43,21 @@ Each phase follows the development loop:
 ## Stage 1: Local Development
 
 _Goal: Prove the core experience works on your Mac._
-_Cost: ~$3-5/month (Twilio only)._
+_Cost: Free (Twilio WhatsApp Sandbox is free)._
 _Characteristics: Hardcoded `.env`, no database, no website, no payments._
 
 - Phase 1: Echo → `01-phase-echo.md`
 - Phase 2: Docker → `02-phase-docker.md`
 - Phase 3: Command → `03-phase-command.md`
 - Phase 4: Screenshots → `04-phase-screenshots.md`
+- Phase 4.2: WhatsApp Channel → `04.2-phase-whatsapp.md`
 - Phase 5: Diffs → `05-phase-diffs.md`
 - Phase 6: End-to-End Local → `06-phase-e2e-local.md`
 
 ## Stage 2: Deploy to Production
 
 _Goal: Same experience, but running in the cloud — works when your laptop is closed._
-_Cost: ~$200 upfront._
+_Cost: ~$180 upfront._
 _Key principle: Same Docker image, different host. Config change, not a rewrite._
 
 - Phase 7: Deploy → `07-phase-deploy.md`
@@ -97,10 +98,10 @@ DEFERRED TO STAGE 3 (Scale):
 
 DEFERRED BEYOND V1:
 - Stripe payments
-- Group SMS threads
+- WhatsApp group chats
 - Multi-project management
 - Native app
-- Multi-channel expansion (WhatsApp, Telegram, Discord)
+- Multi-channel expansion (Telegram, Discord)
 - ImageStore migration to R2/S3
 - Dictation error correction ("Did you mean X?")
 ```
@@ -112,10 +113,10 @@ DEFERRED BEYOND V1:
 Before proceeding to wider launch, all of the following must be true:
 
 - At least 10 engineers from the bootcamp cohort have used it for 2+ weeks
-- Engineers report being able to complete at least 50% of their agentic workflow sessions via SMS
+- Engineers report being able to complete at least 50% of their agentic workflow sessions via WhatsApp
 - Relay server uptime > 99% over a 2-week period
 - Zero instances of message loss or incorrect routing
-- MMS images are readable and arrive in correct order across major carriers
+- Media messages delivered reliably via WhatsApp
 - Works on both iPhone and Android without platform-specific issues
 
 These criteria are tracked in Phase 11 (Beta).

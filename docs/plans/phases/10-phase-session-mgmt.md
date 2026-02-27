@@ -18,7 +18,7 @@ Deliverables:
 
 ## Tasks
 
-- [ ] Implement session management — start, stop, resume, status commands via SMS with Supabase persistence
+- [ ] Implement session management — start, stop, resume, status commands via WhatsApp with Supabase persistence
   - Plan: `/workflow:plan session management — relay-recognized commands, Supabase session state, VM lifecycle`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-session-management-plan.md`
 

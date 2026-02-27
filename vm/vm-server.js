@@ -1,11 +1,11 @@
 const express = require("express");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 const { chromium } = require("playwright");
 
-const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP } = process.env;
+const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP, RELAY_CALLBACK_URL = "" } = process.env;
 
 // Fail-fast env var validation
 if (!ANTHROPIC_API_KEY) {
@@ -21,7 +21,7 @@ if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) {
 
 const IDLE_TIMEOUT = Number(IDLE_TIMEOUT_MS);
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024; // 10MB cap on stdout/stderr
-const IMAGES_DIR = "/tmp/images";
+const IMAGES_DIR = process.env.IMAGES_DIR || "/tmp/images";
 const IMAGE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 const MAX_IMAGE_FILES = 100;
@@ -29,7 +29,6 @@ const MOBILE_VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 2 };
 const DESKTOP_VIEWPORT = { width: 1440, height: 900, deviceScaleFactor: 2 };
 const NAV_TIMEOUT_MS = 15_000;
 const MAX_IMAGE_BYTES = 600_000;
-const HARD_CEILING_BYTES = 1_000_000; // MMS carrier limit
 const JPEG_QUALITY = 75;
 const JPEG_QUALITY_FALLBACK = 50;
 
@@ -44,9 +43,49 @@ let pendingImages = [];
 
 app.use(express.json());
 
+// Collect uncommitted git diffs after command execution
+function collectDiffs() {
+  try {
+    const diff = execSync("git diff HEAD --no-color", {
+      cwd: process.cwd(),
+      timeout: 2000,
+      maxBuffer: 512 * 1024,
+      encoding: "utf-8",
+    });
+
+    if (!diff.trim()) return null;
+
+    const summary = execSync("git diff HEAD --stat --no-color", {
+      cwd: process.cwd(),
+      timeout: 2000,
+      maxBuffer: 64 * 1024,
+      encoding: "utf-8",
+    });
+
+    const summaryLine = summary.trim().split("\n").pop()?.trim() || "";
+
+    return { diff, summary: summaryLine };
+  } catch {
+    return null;
+  }
+}
+
+// POST progress callbacks to relay during command execution
+const pendingCallbacks = [];
+
+async function postCallback(phone, payload) {
+  const url = `${RELAY_CALLBACK_URL}/callback/${encodeURIComponent(phone)}`;
+  const promise = fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch((err) => console.error(`[CALLBACK] Failed: ${err.message}`));
+  pendingCallbacks.push(promise);
+}
+
 // POST /command — run a prompt through Claude Code
 app.post("/command", (req, res) => {
-  const { text } = req.body || {};
+  const { text, callbackPhone } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({
       error: "bad_request",
@@ -62,10 +101,12 @@ app.post("/command", (req, res) => {
 
   busy = true;
   pendingImages = [];
+  pendingCallbacks.length = 0;
   lastActivity = Date.now();
   const start = Date.now();
   const stdoutChunks = [];
   const stderrChunks = [];
+  let approvalRequested = false;
 
   const child = spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"], {
     detached: true,
@@ -92,9 +133,27 @@ app.post("/command", (req, res) => {
   child.stdin.write(text);
   child.stdin.end();
 
+  // Line-buffered stdout parser for ::progress:: and ::approval:: markers
+  let lineBuf = "";
+
   child.stdout.on("data", (chunk) => {
     stdoutBytes += chunk.length;
     if (stdoutBytes <= MAX_OUTPUT_BYTES) stdoutChunks.push(chunk);
+
+    // Parse markers from stdout lines
+    lineBuf += chunk.toString();
+    const lines = lineBuf.split("\n");
+    lineBuf = lines.pop(); // keep incomplete last line in buffer
+
+    for (const line of lines) {
+      if (line.match(/^::approval::/)) {
+        approvalRequested = true;
+      }
+      const progressMatch = line.match(/^::progress::\s*(.+)/);
+      if (progressMatch && RELAY_CALLBACK_URL && callbackPhone) {
+        postCallback(callbackPhone, { type: "progress", message: progressMatch[1] });
+      }
+    }
   });
   child.stderr.on("data", (chunk) => {
     stderrBytes += chunk.length;
@@ -115,46 +174,74 @@ app.post("/command", (req, res) => {
     });
   });
 
-  child.on("close", (code) => {
+  child.on("close", async (code) => {
     clearTimeout(timer);
-    busy = false;
-    activeChild = null;
     lastActivity = Date.now();
     const durationMs = Date.now() - start;
-    const textOut = Buffer.concat(stdoutChunks).toString();
+    const rawOut = Buffer.concat(stdoutChunks).toString();
     const stderrOut = Buffer.concat(stderrChunks).toString();
 
-    if (timedOut) {
+    // Strip ::progress:: and ::approval:: markers from output sent to user
+    const textOut = rawOut
+      .split("\n")
+      .filter((line) => !line.match(/^::progress::\s/) && !line.match(/^::approval::/))
+      .join("\n")
+      .trim();
+
+    try {
+      // Ensure all progress callbacks have been delivered before responding
+      await Promise.allSettled(pendingCallbacks);
+      pendingCallbacks.length = 0;
+
+      const diffResult = collectDiffs();
+
+      if (timedOut) {
+        const images = [...pendingImages];
+        pendingImages = [];
+        console.log(`[TIMEOUT] Killed PID ${child.pid} after ${durationMs}ms`);
+        return res.status(408).json({
+          error: "timeout",
+          message: `Command timed out after ${TIMEOUT}ms`,
+          text: textOut || null,
+          images,
+          diffs: diffResult?.diff || undefined,
+          diffSummary: diffResult?.summary || undefined,
+          durationMs,
+        });
+      }
+
+      if (code !== 0) {
+        const images = [...pendingImages];
+        pendingImages = [];
+        console.log(`[DONE]    Exit ${code}, ${durationMs}ms, ${images.length} image(s)`);
+        return res.status(500).json({
+          error: "execution_error",
+          message: stderrOut || `Process exited with code ${code}`,
+          text: textOut || null,
+          images,
+          diffs: diffResult?.diff || undefined,
+          diffSummary: diffResult?.summary || undefined,
+          exitCode: code,
+          durationMs,
+        });
+      }
+
       const images = [...pendingImages];
       pendingImages = [];
-      console.log(`[TIMEOUT] Killed PID ${child.pid} after ${durationMs}ms`);
-      return res.status(408).json({
-        error: "timeout",
-        message: `Command timed out after ${TIMEOUT}ms`,
-        text: textOut || null,
+      console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
+      res.json({
+        text: textOut,
         images,
+        diffs: diffResult?.diff || undefined,
+        diffSummary: diffResult?.summary || undefined,
+        approvalRequired: approvalRequested && code === 0,
+        exitCode: 0,
         durationMs,
       });
+    } finally {
+      busy = false;
+      activeChild = null;
     }
-
-    if (code !== 0) {
-      const images = [...pendingImages];
-      pendingImages = [];
-      console.log(`[DONE]    Exit ${code}, ${durationMs}ms, ${images.length} image(s)`);
-      return res.status(500).json({
-        error: "execution_error",
-        message: stderrOut || `Process exited with code ${code}`,
-        text: textOut || null,
-        images,
-        exitCode: code,
-        durationMs,
-      });
-    }
-
-    const images = [...pendingImages];
-    pendingImages = [];
-    console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
-    res.json({ text: textOut, images, exitCode: 0, durationMs });
   });
 });
 
@@ -196,37 +283,12 @@ app.post("/screenshot", async (req, res) => {
     const filename = `${crypto.randomUUID()}.jpeg`;
     const filepath = path.join(IMAGES_DIR, filename);
 
-    // JPEG capture — iterative compression with DPR fallback
+    // JPEG capture — try at default quality, retry once at lower quality if too large
     let quality = JPEG_QUALITY;
     let buffer = await page.screenshot({ type: "jpeg", quality, fullPage });
     if (buffer.length > MAX_IMAGE_BYTES) {
       quality = JPEG_QUALITY_FALLBACK;
       buffer = await page.screenshot({ type: "jpeg", quality, fullPage });
-    }
-
-    // Hard ceiling: if still > 1MB, retry at 1x DPR
-    if (buffer.length > HARD_CEILING_BYTES) {
-      console.log(`[SCREENSHOT] ${buffer.length} bytes exceeds 1MB ceiling, retrying at 1x DPR`);
-      await page.setViewportSize({ width: viewportConfig.width, height: viewportConfig.height });
-      // Playwright doesn't support changing DPR on an existing context, so create a new page
-      const page1x = await browser.newPage({
-        viewport: { ...viewportConfig, deviceScaleFactor: 1 },
-      });
-      await page1x.goto(url, { waitUntil: "networkidle", timeout: NAV_TIMEOUT_MS });
-      quality = JPEG_QUALITY;
-      buffer = await page1x.screenshot({ type: "jpeg", quality, fullPage });
-      if (buffer.length > HARD_CEILING_BYTES) {
-        quality = JPEG_QUALITY_FALLBACK;
-        buffer = await page1x.screenshot({ type: "jpeg", quality, fullPage });
-      }
-      await page1x.close();
-
-      if (buffer.length > HARD_CEILING_BYTES) {
-        return res.status(502).json({
-          success: false,
-          error: `Screenshot too large (${buffer.length} bytes) even at 1x DPR and quality ${quality}. MMS limit is 1MB.`,
-        });
-      }
     }
 
     await fs.writeFile(filepath, buffer);
@@ -245,6 +307,84 @@ app.post("/screenshot", async (req, res) => {
     res.status(502).json({ success: false, error: err.message });
   } finally {
     if (browser) await browser.close();
+  }
+});
+
+// POST /approve — create PR or revert changes
+app.post("/approve", async (req, res) => {
+  const { approved } = req.body || {};
+
+  if (busy) {
+    return res.status(409).json({ error: "busy" });
+  }
+
+  busy = true;
+  lastActivity = Date.now();
+
+  try {
+    if (approved) {
+      const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
+        detached: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      activeChild = child;
+
+      child.stdin.write("Create a git commit for all current changes and push a PR using `gh pr create`. Use a descriptive title based on the changes.");
+      child.stdin.end();
+
+      const stdoutChunks = [];
+      child.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
+      child.stderr.on("data", () => {}); // discard stderr
+
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          try { process.kill(-child.pid, "SIGTERM"); } catch (_) {}
+          reject(new Error("Approve command timed out"));
+        }, TIMEOUT);
+
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          if (code !== 0) reject(new Error(`Approve exited with code ${code}`));
+          else resolve();
+        });
+        child.on("error", (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+
+      const stdout = Buffer.concat(stdoutChunks).toString();
+      const prUrlMatch = stdout.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+
+      console.log(`[APPROVE] PR created: ${prUrlMatch ? prUrlMatch[0] : "URL not found"}`);
+      res.json({
+        text: stdout,
+        prUrl: prUrlMatch ? prUrlMatch[0] : null,
+      });
+    } else {
+      execSync("git checkout . && git clean -fd", { cwd: process.cwd(), timeout: 5000 });
+      console.log("[REJECT] Changes reverted");
+      res.json({ text: "Changes reverted." });
+    }
+  } catch (err) {
+    console.error(`[APPROVE_ERR] ${err.message}`);
+    res.status(500).json({ error: "approve_failed", message: err.message });
+  } finally {
+    busy = false;
+    activeChild = null;
+  }
+});
+
+// POST /cancel — kill the active Claude Code process
+app.post("/cancel", (_req, res) => {
+  if (activeChild) {
+    try {
+      process.kill(-activeChild.pid, "SIGTERM");
+    } catch (_) { /* already dead */ }
+    console.log(`[CANCEL] Killed PID ${activeChild.pid}`);
+    res.json({ cancelled: true });
+  } else {
+    res.json({ cancelled: false, message: "no active process" });
   }
 });
 

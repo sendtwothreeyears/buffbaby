@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Phase 4.2: WhatsApp messaging channel via Twilio Sandbox
+- Phase 4.3: WhatsApp-only pivot — removed SMS/MMS, WhatsApp is the sole channel
 - Open-source release preparation
 - LICENSE (MIT), CONTRIBUTING.md, SECURITY.md, ARCHITECTURE.md, CHANGELOG.md
 - `.dockerignore` files for relay and VM
@@ -29,9 +31,9 @@ All notable changes to this project will be documented in this file.
 - 10MB output buffer cap
 - Process group management for clean shutdown
 
-### Phase 1: SMS Echo Server
+### Phase 1: WhatsApp Echo Server
 - Express relay server with Twilio webhook integration
 - Phone number allowlist authentication
-- MMS test image response
+- WhatsApp media test image response
 - Environment variable validation at startup
 - ngrok tunnel for local development

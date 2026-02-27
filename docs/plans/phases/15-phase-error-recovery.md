@@ -9,8 +9,9 @@
 Error recovery and resilience features that make the product robust for real users. VM restart detection, stale session handling, thrashing detection, and message queuing during active workflows.
 
 Deliverables:
-- **VM restart detection:** Relay periodically pings VM `/health`. If VM goes down, sends SMS: "Your session was interrupted. Last state saved at commit [hash]. Reply 'resume' to pick up where you left off."
-- **Stale session handling:** If a session has been idle for > 24 hours with uncommitted changes, send a reminder SMS. If idle > 7 days, auto-stash and notify.
+- **VM restart detection:** Relay periodically pings VM `/health`. If VM goes down, sends WhatsApp message: "Your session was interrupted. Last state saved at commit [hash]. Reply 'resume' to pick up where you left off."
+- **Stale session handling:** If a session has been idle for > 24 hours with uncommitted changes, send a reminder (requires active 24-hour WhatsApp session window or template message). If idle > 7 days, auto-stash and notify.
+- **Note:** Proactive notifications (stale session reminders, VM restart alerts) are constrained by WhatsApp's 24-hour session window — the system can only send messages if the user has messaged within 24 hours. Outside this window, approved template messages are required (Meta Business verification).
 - **Thrashing detection:** Monitor Claude Code output for repeated failure patterns (3+ similar error messages or "attempt N of..." patterns). Send: "Agent may be stuck (3 failed attempts on the same issue). Reply 'fresh' to spawn a new agent, or 'stop' to cancel."
 - **Message queuing during active work:** When the relay state is `working`, incoming messages are queued (not rejected). Reply: "I'm currently working on your last request. I'll process your next message when this completes. Reply 'cancel' to stop." Process queued messages after the current task completes.
 

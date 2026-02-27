@@ -12,7 +12,7 @@ textslash runs Claude Code with `--dangerously-skip-permissions` on a Docker VM.
 ## What's Implemented
 
 - **Twilio webhook signature validation** — incoming requests verified using `twilio.webhook()` middleware
-- **Phone number allowlist** — only configured numbers can send commands
+- **Phone number allowlist** — only configured numbers can send commands (`whatsapp:` prefix stripped before allowlist check)
 - **Non-root container user** — limits container escape impact
 - **Path traversal protection** on VM image endpoint (`/images/:filename`) — `path.resolve` + `startsWith` check
 - **Relay image proxy validation** — UUID regex whitelist (`/^[0-9a-f-]+\.jpeg$/`) prevents path traversal
@@ -31,8 +31,9 @@ These are intentional tradeoffs for the alpha stage:
 - **`--dangerously-skip-permissions`** — required for headless Claude Code operation. The container can execute any command within its boundaries.
 - **No rate limiting** — a compromised phone number could flood the VM with commands.
 - **No encryption at rest** — project files on the VM are unencrypted.
-- **Relay image proxy is publicly accessible** — Twilio requires public URLs for MMS media. Mitigated by UUID filenames (unguessable) and 30-minute TTL. Token-based auth deferred to Phase 7.
+- **Relay image proxy is publicly accessible** — Twilio requires public URLs for WhatsApp media. Mitigated by UUID filenames (unguessable) and 30-minute TTL. Token-based auth deferred to Phase 7.
 - **Playwright URL navigation** — Claude Code could screenshot external URLs from within the container. Container is sandboxed; Chromium runs headless with `--no-sandbox` (required in Docker). URL allowlisting deferred to pre-public release.
+- **WhatsApp Sandbox limitations** — 24-hour session window (can only reply within 24h of last user message), users must send a join code to opt in, sandbox webhook URL must be configured separately in Twilio Console
 
 ## Responsible Disclosure
 

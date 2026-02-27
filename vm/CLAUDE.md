@@ -32,5 +32,26 @@ Error: `{ "success": false, "error": "..." }`
 ### Important
 
 - Always use blocking curl (no background `&`) — the image must be saved before you finish
-- The screenshot is automatically sent to the user as an MMS image — just confirm what you captured in your text response
+- The screenshot is automatically sent to the user as a WhatsApp media message — just confirm what you captured in your text response
 - If the screenshot fails, tell the user why (e.g., "The dev server isn't running on port 8080")
+
+## Progress Reporting
+
+When executing multi-step tasks, emit progress markers to keep the user informed:
+
+- Use `::progress:: <message>` on its own line to report milestones
+- Use `::approval::` on its own line when you've made code changes that need user approval before creating a PR
+
+Example:
+```
+::progress:: Reading codebase and understanding structure
+::progress:: Making changes to src/components/Navbar.tsx
+::progress:: Running tests
+::approval::
+```
+
+Guidelines:
+- Emit 3-6 progress markers per task (not too many, not too few)
+- Keep messages short and descriptive
+- Always emit `::approval::` after making code changes, before creating a PR
+- Do NOT emit `::approval::` if no code changes were made

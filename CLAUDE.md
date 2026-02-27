@@ -1,31 +1,31 @@
-# SMS Agentic Development Cockpit
+# WhatsApp Agentic Development Cockpit
 
 ## About This Project
 
-An SMS-based interface for agentic development workflows. Engineers text a phone number and control Claude Code (running on a cloud VM) entirely via SMS/MMS — no app to download, no laptop required.
+A WhatsApp-based interface for agentic development workflows. Engineers send a WhatsApp message and control Claude Code (running on a cloud VM) entirely via WhatsApp — no additional app to download, no laptop required.
 
-**Core thesis:** SMS is the one universal interface on every phone. Diffs are images. Previews are screenshots. Approvals are text replies. The conversation thread is the project log.
+**Core thesis:** WhatsApp is the world's most popular messaging app — 2B+ users, rich formatting (monospace code blocks), reliable delivery (in-order, read receipts). Diffs as monospace text, previews as screenshots, approvals as text replies. The conversation thread is the project log.
 
-**PRD:** `docs/PRD_SMS_AGENTIC_COCKPIT.md` — the full product specification. Read this first for product context.
+**PRD:** `docs/PRD_WHATSAPP_AGENTIC_COCKPIT.md` — the full product specification. Read this first for product context.
 
 ## Architecture
 
 ```
-Phone (SMS) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
+Phone (WhatsApp) → Twilio → Relay Server → Cloud VM (Claude Code + Playwright)
 ```
 
 Three components:
-1. **Relay Server** (`server.js`, 68 LOC) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as SMS/MMS.
-2. **Cloud VM** (`vm/`, 157 LOC) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
-3. **Twilio** — SMS/MMS transport. Webhooks inbound, API outbound.
+1. **Relay Server** (`server.js`) — Express server. Receives Twilio webhooks, authenticates by phone number, sends responses as WhatsApp messages.
+2. **Cloud VM** (`vm/`) — always-on Docker container per user. Contains Claude Code CLI, Playwright, Node.js, git, Chromium. Runs identically local and in production.
+3. **Twilio** — WhatsApp transport. Webhooks inbound, API outbound. WhatsApp via Twilio Sandbox (dev) or Business number (prod).
 
-**Phase plan:** `docs/PHASE_PLAN_SMS_AGENTIC_COCKPIT.md` — sequenced development phases.
+**Phase plan:** `docs/plans/phases/00-overview.md` — sequenced development phases.
 
 ## Key Files
 
 | File | What It Does | When to Read |
 |------|-------------|--------------|
-| `server.js` | Relay server — Twilio webhooks, phone allowlist, SMS/MMS | Changing relay behavior |
+| `server.js` | Relay server — Twilio webhooks, phone allowlist, WhatsApp messaging | Changing relay behavior |
 | `vm/vm-server.js` | VM API — Claude Code CLI wrapper, image serving | Changing VM behavior |
 | `vm/Dockerfile` | Container image — Node 22, Chromium, Claude Code | Changing container setup |
 | `docker-compose.yml` | VM orchestration — ports, memory, env | Changing local dev setup |
@@ -165,12 +165,14 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 
 ## Project-Specific Conventions
 
-### SMS/MMS Constraints
+### WhatsApp Constraints
 
-- SMS has no formatting — no markdown, no syntax highlighting in text
-- All visual content (diffs, previews, review summaries) must be rendered as images sent via MMS
-- SMS segments are 160 chars (GSM-7) or 70 chars (UCS-2/emoji) — keep text responses concise
-- MMS images must be < 1MB: PNG for diffs (sharp text), JPEG for screenshots
+- 24-hour session window — system can only reply within 24h of user's last message
+- Sandbox requires join code before first use
+- 1 media attachment per message (multiple images = multiple messages)
+- 4096-char message limit
+- Monospace code blocks supported (triple backtick)
+- 16MB media limit
 
 ### Docker-First Development
 
@@ -183,7 +185,7 @@ DROP TABLE, DELETE FROM (without WHERE), migrations that destroy data
 
 | Service | Purpose |
 |---------|---------|
-| **Twilio** | SMS/MMS transport — webhooks inbound, API outbound |
+| **Twilio** | WhatsApp transport — webhooks inbound, API outbound. Sandbox (dev) or Business number (prod). |
 | **Claude Code CLI** | Headless agent execution on the VM |
 | **Playwright** | Screenshot capture, page navigation, app interaction |
 | **GitHub** | Repos, PRs, OAuth for user onboarding |
@@ -209,9 +211,11 @@ Keep entries concise. One line per lesson:
 
 - **Twilio**: Webhook signature validation fails if ngrok URL changes — update .env
 - **Docker**: Playwright needs `--no-sandbox` flag in Docker containers
-- **MMS**: Images over 1MB silently fail on some carriers — always compress
+- **WhatsApp**: 24-hour session window — can only reply within 24h of user's last message
 ```
 
 ## Lessons Learned
 
-_(None yet — add lessons here as you discover them)_
+- **Flycast**: Use port 80 (default), NOT the internal_port. `http://app.flycast/health` works; `http://app.flycast:3001/health` returns ECONNRESET. Fly Proxy maps port 80 → internal_port automatically.
+- **Flycast**: `.flycast` routes through Fly Proxy (enables auto-start). `.internal` goes direct to the Machine (no auto-start for stopped VMs).
+- **Twilio WhatsApp Sandbox**: 1600-char message limit (stricter than WhatsApp's 4096). Long responses must be chunked.

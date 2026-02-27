@@ -1,7 +1,7 @@
 {
   "name": "textslash-relay",
   "version": "0.1.0",
-  "description": "SMS relay server for textslash — control Claude Code via SMS",
+  "description": "WhatsApp relay server for textslash — control Claude Code via WhatsApp",
   "author": "sendtwothreeyears",
   "license": "MIT",
   "repository": {
@@ -12,7 +12,7 @@
   "bugs": {
     "url": "https://github.com/sendtwothreeyears/ts/issues"
   },
-  "keywords": ["sms", "claude", "ai", "development", "twilio", "mms"],
+  "keywords": ["whatsapp", "claude", "ai", "development", "twilio"],
   "engines": {
     "node": ">=22.0.0"
   },

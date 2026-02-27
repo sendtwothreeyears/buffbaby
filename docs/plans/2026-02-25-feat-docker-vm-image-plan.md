@@ -10,11 +10,11 @@ phase: 2
 
 ## Overview
 
-Build a Docker image that packages the full compute environment for the SMS Agentic Cockpit: Claude Code CLI, Playwright MCP, Node.js, git, and Chromium. Inside the container, a single-file Express server (`vm-server.js`) accepts commands via POST, runs them through Claude Code in headless mode, and returns structured JSON. This is the "brain" container — Phase 1's relay is the "mouth." Phase 3 connects them.
+Build a Docker image that packages the full compute environment for the WhatsApp Agentic Development Cockpit: Claude Code CLI, Playwright MCP, Node.js, git, and Chromium. Inside the container, a single-file Express server (`vm-server.js`) accepts commands via POST, runs them through Claude Code in headless mode, and returns structured JSON. This is the "brain" container — Phase 1's relay is the "mouth." Phase 3 connects them.
 
 ## Problem Statement / Motivation
 
-The SMS Agentic Cockpit needs a portable, reproducible compute environment that runs Claude Code headlessly. Docker provides identical local/production environments (same image on Mac and Fly.io) and acts as the security sandbox (justifying `--dangerously-skip-permissions`). The HTTP wrapper makes it callable from the relay server without tight coupling.
+The WhatsApp Agentic Development Cockpit needs a portable, reproducible compute environment that runs Claude Code headlessly. Docker provides identical local/production environments (same image on Mac and Fly.io) and acts as the security sandbox (justifying `--dangerously-skip-permissions`). The HTTP wrapper makes it callable from the relay server without tight coupling.
 
 ## Proposed Solution
 

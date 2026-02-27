@@ -19,7 +19,7 @@ Take a PRD and decompose it into sequenced development phases, where each phase 
 
 1. Read the PRD thoroughly — scope, architecture, user flows, technical considerations
 2. Identify the **architectural layers** — what are the distinct components? (e.g., messaging layer, compute layer, image pipeline, onboarding)
-3. Identify **dependencies** — what must exist before something else can work? (e.g., you can't send screenshots via SMS until the SMS echo works)
+3. Identify **dependencies** — what must exist before something else can work? (e.g., you can't send screenshots via WhatsApp until the echo server works)
 4. Identify the **core experience** — what is the one thing that, if it works, proves the product? Everything else is built around this.
 
 ## Phase 2: Define Development Stages
@@ -64,7 +64,7 @@ Within each stage, create numbered phases. Each phase must have:
 ### Phase Size Guide
 
 - **Too small:** "Add Twilio webhook signature validation" — this is a task within a phase, not a phase itself
-- **Right size:** "Relay forwards SMS to Claude Code in Docker, response comes back as SMS" — one new capability, clear validation
+- **Right size:** "Relay forwards WhatsApp message to Claude Code in Docker, response comes back" — one new capability, clear validation
 - **Too big:** "Full end-to-end workflow with screenshots, diffs, multi-agent, and session management" — break this into 4-5 phases
 
 ## Phase 4: Map Phases to Workflow Tasks
@@ -73,14 +73,14 @@ For each phase, define the tasks that will build it. Each task flows through the
 
 ```
 Phase 3: Command Relay
-  - [ ] Relay forwards SMS to Claude Code in Docker, returns response as SMS
-    - Plan: /workflow:plan relay server forwards SMS to Claude Code headless in Docker
-    - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-sms-relay-plan.md
+  - [ ] Relay forwards WhatsApp message to Claude Code in Docker, returns response
+    - Plan: /workflow:plan relay server forwards messages to Claude Code headless in Docker
+    - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-relay-plan.md
 
 Phase 4: Screenshots
-  - [ ] Claude Code captures screenshots via Playwright, sent back via Twilio MMS
-    - Brainstorm: /workflow:brainstorm screenshot capture and MMS delivery approach
-    - Plan: /workflow:plan screenshot pipeline with Playwright and Twilio MMS
+  - [ ] Claude Code captures screenshots via Playwright MCP, sent back via WhatsApp
+    - Brainstorm: /workflow:brainstorm screenshot capture and WhatsApp delivery approach
+    - Plan: /workflow:plan screenshot pipeline with Playwright MCP and WhatsApp media
     - Ship: /workflow:ship docs/plans/YYYY-MM-DD-feat-screenshot-pipeline-plan.md
 ```
 

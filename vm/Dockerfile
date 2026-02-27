@@ -25,11 +25,13 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install Claude Code CLI and Playwright CLI globally
 RUN npm install -g @anthropic-ai/claude-code playwright
 
-# Install only Chromium for Playwright (not Firefox/WebKit)
-RUN npx playwright install chromium
-
 # Create non-root user (Claude Code refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash appuser
+
+# Install Playwright Chromium as appuser so the binary lands in ~appuser/.cache
+USER appuser
+RUN npx playwright install chromium
+USER root
 
 WORKDIR /app
 
@@ -42,7 +44,7 @@ COPY vm-server.js CLAUDE.md ./
 COPY test-app/ ./test-app/
 
 # Create images directory for Phase 4+ and set ownership
-RUN mkdir -p /tmp/images && chown appuser:appuser /tmp/images
+RUN mkdir -p /tmp/images /data/images && chown appuser:appuser /tmp/images /data/images
 RUN chown -R appuser:appuser /app
 
 USER appuser
