@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Phase 4.2: WhatsApp messaging channel via Twilio Sandbox
+- Phase 4.3: WhatsApp-only pivot — removed SMS/MMS, WhatsApp is the sole channel
 - Open-source release preparation
 - LICENSE (MIT), CONTRIBUTING.md, SECURITY.md, ARCHITECTURE.md, CHANGELOG.md
 - `.dockerignore` files for relay and VM

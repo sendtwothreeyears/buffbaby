@@ -185,7 +185,7 @@ DEFERRED BEYOND V1:
 - Group SMS threads
 - Multi-project management
 - Native app
-- Multi-channel expansion (WhatsApp, Telegram, Discord)
+- Multi-channel expansion (WhatsApp, Telegram, Discord) _(Note: WhatsApp implemented in Phase 4.2, 2026-02-26)_
 - ImageStore migration to R2/S3
 ```
 

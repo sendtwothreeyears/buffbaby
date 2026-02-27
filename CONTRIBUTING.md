@@ -26,7 +26,7 @@ cd vm && npm install   # VM server deps
 3. `docker compose up -d`  — start VM
 4. `npm run dev`            — start relay (with file watching)
 5. `ngrok http 3000`        — tunnel for Twilio webhooks
-6. Update Twilio phone number webhook URL to `<ngrok-url>/sms`
+6. Update Twilio WhatsApp Sandbox webhook URL to `<ngrok-url>/webhook`
 
 ### Code Style
 
@@ -46,7 +46,7 @@ cd vm && npm install   # VM server deps
 
 ```
 textslash/
-├── server.js              # Relay server (Twilio ↔ SMS)
+├── server.js              # Relay server (Twilio ↔ WhatsApp)
 ├── vm/
 │   ├── vm-server.js       # VM server (HTTP API ↔ Claude Code)
 │   ├── Dockerfile         # Container image

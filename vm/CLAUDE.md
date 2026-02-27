@@ -32,5 +32,5 @@ Error: `{ "success": false, "error": "..." }`
 ### Important
 
 - Always use blocking curl (no background `&`) — the image must be saved before you finish
-- The screenshot is automatically sent to the user as an MMS image — just confirm what you captured in your text response
+- The screenshot is automatically sent to the user as a WhatsApp media message — just confirm what you captured in your text response
 - If the screenshot fails, tell the user why (e.g., "The dev server isn't running on port 8080")

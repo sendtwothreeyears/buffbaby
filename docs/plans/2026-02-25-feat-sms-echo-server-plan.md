@@ -173,6 +173,6 @@ After setup:
 ## References
 
 - Phase plan: `docs/plans/phases/01-phase-echo.md`
-- PRD: `PRD_SMS_AGENTIC_COCKPIT.md`
+- PRD: `PRD_WHATSAPP_AGENTIC_COCKPIT.md`
 - Twilio SMS webhook docs: https://www.twilio.com/docs/messaging/guides/webhook-request
 - Twilio Node.js SDK: https://www.twilio.com/docs/libraries/reference/twilio-node
