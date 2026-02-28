@@ -26,4 +26,13 @@ async function fetchImageBuffer(imgUrl) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-module.exports = { chunkText, truncateAtFileBoundary, fetchImageBuffer };
+function viewLinkLabel(outputType) {
+  switch (outputType) {
+    case "diff": return "View full diff";
+    case "build": return "View full log";
+    case "code": return "View full file";
+    default: return "View full output";
+  }
+}
+
+module.exports = { chunkText, truncateAtFileBoundary, fetchImageBuffer, viewLinkLabel };

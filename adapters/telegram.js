@@ -1,5 +1,5 @@
 const { Bot, InputFile } = require("grammy");
-const { chunkText, truncateAtFileBoundary, fetchImageBuffer } = require("./utils");
+const { chunkText, truncateAtFileBoundary, fetchImageBuffer, viewLinkLabel } = require("./utils");
 
 const {
   TELEGRAM_BOT_TOKEN,
@@ -133,14 +133,27 @@ module.exports = {
 
       // Format text + diffs
       let responseText = data.text || "";
-      if (data.diffs) {
+      let useHtml = false;
+
+      // Append web view link if present (Telegram: HTML <a> tag)
+      if (data.viewUrl) {
+        const publicUrl = process.env.PUBLIC_URL || "";
+        // Must escape the text portion since the whole message will use parse_mode: HTML
+        responseText = escapeHtml(responseText);
+        responseText += `\n\n<a href="${escapeHtml(publicUrl + data.viewUrl)}">${viewLinkLabel(data.outputType)} ↗</a>`;
+        useHtml = true;
+      }
+
+      if (data.diffs && !data.viewUrl) {
         const diffBlock = formatTelegramDiff(data.diffs, data.diffSummary, MAX_MSG - responseText.length);
         if (diffBlock && responseText.length + diffBlock.length <= MAX_MSG) {
           responseText += diffBlock;
+          useHtml = true;
         } else {
           // Overflow: send text first, then diffs separately
           if (responseText) {
-            await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG));
+            const opts = useHtml ? { parse_mode: "HTML" } : {};
+            await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG), opts);
           }
           const overflowDiff = formatTelegramDiff(data.diffs, data.diffSummary, MAX_MSG);
           if (overflowDiff) {
@@ -152,8 +165,7 @@ module.exports = {
       }
 
       if (responseText) {
-        // Use HTML parse_mode only when we have diffs (contains <pre> tags)
-        const opts = data.diffs ? { parse_mode: "HTML" } : {};
+        const opts = useHtml ? { parse_mode: "HTML" } : {};
         await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG), opts);
         await sendImages(chatId, imageBuffers);
       } else if (imageBuffers.length > 0) {
