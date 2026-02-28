@@ -57,6 +57,7 @@ const app = express();
 let busy = false;
 let activeChild = null;
 let lastActivity = Date.now();
+let skipContinue = false; // Set by POST /clear — next /command starts a fresh conversation
 // Images captured by POST /screenshot during a /command execution.
 // Safe because only one /command runs at a time (busy flag enforces single concurrency).
 // /command resets on entry, /screenshot appends, /command drains on exit.
@@ -132,7 +133,11 @@ app.post("/command", (req, res) => {
   let approvalRequested = false;
 
   const cwd = getCurrentCwd();
-  const child = spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"], {
+  const args = ["-p", "--dangerously-skip-permissions", "-"];
+  if (!skipContinue) args.splice(1, 0, "--continue");
+  skipContinue = false;
+
+  const child = spawn("claude", args, {
     cwd,
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
@@ -762,6 +767,13 @@ app.post("/cancel", (_req, res) => {
   } else {
     res.json({ cancelled: false, message: "no active process" });
   }
+});
+
+// POST /clear — start a fresh conversation (next /command omits --continue)
+app.post("/clear", (_req, res) => {
+  skipContinue = true;
+  console.log("[CLEAR] Next command will start a fresh conversation");
+  res.json({ text: "Context cleared. Next command starts a fresh conversation." });
 });
 
 // Image cleanup — remove expired or excess images every 5 minutes
