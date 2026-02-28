@@ -23,6 +23,8 @@ async function createSession(sessionName, cwd, command) {
   // Unset PORT so user apps don't collide with the VM server (PORT=3001)
   const safeCmd = `env -u PORT ${command}`;
   await exec(["new-session", "-d", "-s", sessionName, "-c", cwd, safeCmd]);
+  // Keep pane alive after command exits so we can read the exit code
+  await exec(["set-option", "-t", sessionName, "remain-on-exit", "on"]);
   // Pipe all pane output to a log file for reliable streaming
   await exec(["pipe-pane", "-t", sessionName, `cat >> ${logPath(sessionName)}`]);
 }

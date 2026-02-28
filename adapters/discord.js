@@ -459,8 +459,9 @@ function startOutputPolling(threadId) {
 
       // Process exited
       if (!processRunning) {
+        const codeStr = exitCode === 0 ? "0 (success)" : exitCode != null ? `${exitCode} (error)` : "unknown";
         await info.discordThread.send(
-          `Process exited with code ${exitCode ?? "unknown"}. Thread remains open — use \`/done\` to close.`,
+          `Process finished with code ${codeStr}. Use \`/done\` to close this thread.`,
         );
         clearInterval(interval);
       }
