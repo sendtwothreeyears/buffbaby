@@ -1041,6 +1041,16 @@ app.listen(Number(PORT), () => {
   console.log(`[STARTUP] VM server listening on port ${PORT}`);
   console.log(`[STARTUP] Idle timeout: ${IDLE_TIMEOUT / 1000}s`);
 
+  // Configure git to use gh CLI for HTTPS credentials (uses GITHUB_TOKEN if set)
+  if (process.env.GITHUB_TOKEN) {
+    try {
+      execSync("gh auth setup-git", { timeout: 5000, encoding: "utf-8" });
+      console.log(`[STARTUP] Git credential helper configured via gh`);
+    } catch (err) {
+      console.warn(`[STARTUP] gh auth setup-git failed: ${err.message}`);
+    }
+  }
+
   // Start test app server on port 8080 (for screenshot testing, not production)
   if (ENABLE_TEST_APP) {
     const testAppPath = path.join(__dirname, "test-app");
