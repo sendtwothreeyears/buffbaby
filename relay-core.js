@@ -367,9 +367,17 @@ function createRelay(adapters) {
   clear           — Start fresh conversation
   approve/reject  — Control pending changes`;
 
-      if (skillCache.length > 0) {
-        const skillLines = skillCache.map((s) => `  ${s.name} — ${s.description}`).join("\n");
-        helpText += `\n\nProject Skills (from current repo)\n${skillLines}`;
+      const baseSkills = skillCache.filter((s) => s.source === "base");
+      const repoSkills = skillCache.filter((s) => s.source === "repo");
+
+      if (baseSkills.length > 0) {
+        const lines = baseSkills.map((s) => `  /${s.name} — ${s.description}`).join("\n");
+        helpText += `\n\nSkills\n${lines}`;
+      }
+
+      if (repoSkills.length > 0) {
+        const lines = repoSkills.map((s) => `  /${s.name} — ${s.description}`).join("\n");
+        helpText += `\n\nProject Skills\n${lines}`;
       }
 
       helpText += "\n\nEverything else is sent directly to Claude Code.";
@@ -389,10 +397,20 @@ function createRelay(adapters) {
             updateSkillCache(data.skills);
           }
           if (skillCache.length === 0) {
-            adapter.sendText(userId, "No project skills found in current repo.");
+            adapter.sendText(userId, "No skills found.");
           } else {
-            const lines = skillCache.map((s) => `  ${s.name} — ${s.description}`).join("\n");
-            adapter.sendText(userId, `Project Skills\n${lines}`);
+            const baseSkills = skillCache.filter((s) => s.source === "base");
+            const repoSkills = skillCache.filter((s) => s.source === "repo");
+            let text = "";
+            if (baseSkills.length > 0) {
+              const lines = baseSkills.map((s) => `  /${s.name} — ${s.description}`).join("\n");
+              text += `Skills\n${lines}`;
+            }
+            if (repoSkills.length > 0) {
+              const lines = repoSkills.map((s) => `  /${s.name} — ${s.description}`).join("\n");
+              text += (text ? "\n\n" : "") + `Project Skills\n${lines}`;
+            }
+            adapter.sendText(userId, text);
           }
         })
         .catch((err) => {
@@ -461,14 +479,15 @@ function createRelay(adapters) {
 
       console.log(`[ACTION] ${userId}: ${command}${args ? " " + JSON.stringify(args) : ""}`);
 
-      const fetchOpts = { method, signal: AbortSignal.timeout(ACTION_TIMEOUT_MS) };
+      const baseFetchOpts = { method };
       if (body) {
-        fetchOpts.headers = { "Content-Type": "application/json" };
-        fetchOpts.body = body;
+        baseFetchOpts.headers = { "Content-Type": "application/json" };
+        baseFetchOpts.body = body;
       }
 
       const doActionFetch = async () => {
-        const r = await fetch(vmUrl, fetchOpts);
+        // Fresh AbortSignal per attempt so cold-start wait doesn't eat into timeout
+        const r = await fetch(vmUrl, { ...baseFetchOpts, signal: AbortSignal.timeout(ACTION_TIMEOUT_MS) });
         const text = await r.text();
         let d;
         try { d = JSON.parse(text); } catch { throw Object.assign(new Error(`VM returned non-JSON (${r.status})`), { nonJson: true }); }
@@ -491,14 +510,17 @@ function createRelay(adapters) {
 
           while (Date.now() - start < MAX_WAIT) {
             await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+            let healthy = false;
             try {
               const healthRes = await fetch(`${CLAUDE_HOST}/health`, { signal: AbortSignal.timeout(2_000) });
-              if (healthRes.ok) {
-                console.log("[COLD-START] VM is up, retrying action");
-                data = await doActionFetch();
-                break;
-              }
+              healthy = healthRes.ok;
             } catch { /* still waking */ }
+
+            if (healthy) {
+              console.log("[COLD-START] VM is up, retrying action");
+              data = await doActionFetch();
+              break;
+            }
           }
 
           if (!data) {

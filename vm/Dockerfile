@@ -22,11 +22,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Dev utilities, database clients, git-lfs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq \
+    ripgrep \
+    tree \
+    htop \
+    tmux \
+    rsync \
+    nano \
+    sqlite3 \
+    postgresql-client \
+    redis-tools \
+    git-lfs \
+    && rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
 # Skip automatic browser download during npm install (we install explicitly below)
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # Install Claude Code CLI and Playwright CLI globally
 RUN npm install -g @anthropic-ai/claude-code playwright
+
+# Package managers + deploy CLIs
+RUN npm install -g pnpm yarn bun vercel netlify-cli @railway/cli wrangler
+
+# Fly.io CLI (install to shared path so appuser can access it)
+RUN curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
 
 # Create non-root user (Claude Code refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash appuser
@@ -43,8 +72,13 @@ COPY package.json ./
 RUN npm install --production
 
 # Copy application files
-COPY *.js CLAUDE.md ./
+COPY *.js ./
 COPY test-app/ ./test-app/
+
+# Global Claude Code config: base skills + CLAUDE.md
+COPY base-skills/ /home/appuser/.claude/skills/
+COPY global-claude.md /home/appuser/.claude/CLAUDE.md
+RUN chown -R appuser:appuser /home/appuser/.claude
 
 # Create directories and set ownership (Fly Volume mounts overlay these — dirs created at runtime too)
 RUN mkdir -p /tmp/images /data/images /data/repos && chown appuser:appuser /tmp/images /data/images /data/repos /data
