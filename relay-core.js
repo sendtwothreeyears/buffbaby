@@ -469,7 +469,9 @@ function createRelay(adapters) {
 
       const doActionFetch = async () => {
         const r = await fetch(vmUrl, fetchOpts);
-        const d = await r.json();
+        const text = await r.text();
+        let d;
+        try { d = JSON.parse(text); } catch { throw Object.assign(new Error(`VM returned non-JSON (${r.status})`), { nonJson: true }); }
         if (!r.ok) throw new Error(d.message || d.error || `VM returned ${r.status}`);
         return d;
       };
@@ -479,7 +481,7 @@ function createRelay(adapters) {
         data = await doActionFetch();
       } catch (fetchErr) {
         // Cold-start retry — same pattern as forwardToVM
-        if (fetchErr.cause?.code === "ECONNREFUSED" || fetchErr.message?.includes("ECONNREFUSED")) {
+        if (fetchErr.cause?.code === "ECONNREFUSED" || fetchErr.message?.includes("ECONNREFUSED") || fetchErr.nonJson) {
           console.log(`[COLD-START] VM not reachable for action: ${command}`);
           await adapter.sendText(userId, "\u23f3 Waking up your VM...");
 
