@@ -33,6 +33,12 @@ function classifyCommand(text) {
   // Exact-match VM action-commands
   if (lower === "repos") return { type: "action", command: "repos" };
   if (lower === "status") return { type: "action", command: "status" };
+  if (lower === "branch") return { type: "action", command: "branch" };
+
+  // Exact-match PR commands (must be exact to avoid collision with freeform, e.g. "pr create a button")
+  if (lower === "pr create") return { type: "action", command: "pr-create" };
+  if (lower === "pr status") return { type: "action", command: "pr-status" };
+  if (lower === "pr merge") return { type: "action", command: "pr-merge" };
 
   // Pattern-match VM action-commands (require arguments)
   // Match against original text to preserve URL/name casing
@@ -42,15 +48,29 @@ function classifyCommand(text) {
   const switchMatch = trimmed.match(/^switch\s+(\S+)/i);
   if (switchMatch) return { type: "action", command: "switch", args: { name: switchMatch[1] } };
 
+  const checkoutMatch = trimmed.match(/^checkout\s+(-b\s+)?(\S+)/i);
+  if (checkoutMatch) return { type: "action", command: "checkout", args: { create: !!checkoutMatch[1], name: checkoutMatch[2] } };
+
   // Everything else → Claude Code
   return { type: "freeform" };
 }
+
+const WELCOME_MESSAGE = `Welcome to your development cockpit!
+
+Get started:
+  clone <url>   — Clone a repository
+  help          — See all commands
+
+Your VM is ready. Clone a repo to begin.`;
 
 function createRelay(adapters) {
   const app = express();
 
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json()); // for VM callbacks
+
+  // Onboarding state: null = unknown, true/false = checked
+  let onboarded = null;
 
   // --- Adapter registry ---
   const adapterMap = new Map();
@@ -60,6 +80,17 @@ function createRelay(adapters) {
 
   // --- Skill cache (populated from clone/switch VM responses) ---
   let skillCache = [];
+
+  function updateSkillCache(skills) {
+    skillCache = skills;
+    // Notify Discord adapter to update slash commands
+    const discord = adapterMap.get("discord");
+    if (discord?.updateSlashCommands) {
+      discord.updateSlashCommands(skills).catch((err) => {
+        console.error(`[SKILLS] Discord slash command update failed: ${err.message}`);
+      });
+    }
+  }
 
   function getAdapterForUser(userId) {
     const prefix = userId.split(":")[0];
@@ -146,6 +177,26 @@ function createRelay(adapters) {
     res.sendStatus(200);
   });
 
+  // --- Onboarding check ---
+  async function checkAndShowOnboarding(userId) {
+    if (onboarded === true) return;
+
+    try {
+      const res = await fetch(`${CLAUDE_HOST}/onboarded`, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      onboarded = data.onboarded;
+
+      if (!onboarded) {
+        getAdapterForUser(userId).sendText(userId, WELCOME_MESSAGE);
+        // Mark as onboarded so it only shows once
+        onboarded = true;
+        fetch(`${CLAUDE_HOST}/onboarded`, { method: "POST", signal: AbortSignal.timeout(5000) }).catch(() => {});
+      }
+    } catch {
+      // VM not reachable — skip onboarding check (will retry next time)
+    }
+  }
+
   // --- Message handler (called by adapter) ---
   function onMessage(userId, text) {
     const state = getState(userId);
@@ -188,6 +239,12 @@ function createRelay(adapters) {
     if (classified.type === "meta") {
       handleMetaCommand(userId, classified);
       return;
+    }
+
+    // Show welcome message on first interaction (non-blocking, fire-and-forget)
+    if (onboarded === null) {
+      onboarded = true; // Prevent duplicate checks from rapid messages
+      checkAndShowOnboarding(userId);
     }
 
     state.state = "working";
@@ -294,14 +351,19 @@ function createRelay(adapters) {
 
     if (classified.command === "help") {
       let helpText = `Core Commands
-  clone <url>  — Clone a repo to the VM
-  switch <name> — Switch to a different repo
-  repos        — List all cloned repos
-  status       — Current repo, branch, changed files
-  help         — Show this help
-  cancel       — Cancel running command
-  approve      — Approve pending changes
-  reject       — Reject pending changes`;
+  clone <url>     — Clone a repo to the VM
+  switch <name>   — Switch to a different repo
+  repos           — List all cloned repos
+  status          — Current repo, branch, changed files
+  branch          — List branches
+  checkout <name> — Switch branch
+  checkout -b <n> — Create + switch branch
+  pr create       — Create PR from current branch
+  pr status       — CI/review status
+  pr merge        — Merge current PR
+  help            — Show this help
+  cancel          — Cancel running command
+  approve/reject  — Control pending changes`;
 
       if (skillCache.length > 0) {
         const skillLines = skillCache.map((s) => `  ${s.name} — ${s.description}`).join("\n");
@@ -322,7 +384,7 @@ function createRelay(adapters) {
         .then((r) => r.json())
         .then((data) => {
           if (data.skills) {
-            skillCache = data.skills;
+            updateSkillCache(data.skills);
           }
           if (skillCache.length === 0) {
             adapter.sendText(userId, "No project skills found in current repo.");
@@ -365,6 +427,25 @@ function createRelay(adapters) {
           break;
         case "status":
           vmUrl = `${CLAUDE_HOST}/status`;
+          break;
+        case "branch":
+          vmUrl = `${CLAUDE_HOST}/branch`;
+          break;
+        case "checkout":
+          vmUrl = `${CLAUDE_HOST}/checkout`;
+          method = "POST";
+          body = JSON.stringify({ name: args.name, create: args.create });
+          break;
+        case "pr-create":
+          vmUrl = `${CLAUDE_HOST}/pr/create`;
+          method = "POST";
+          break;
+        case "pr-status":
+          vmUrl = `${CLAUDE_HOST}/pr/status`;
+          break;
+        case "pr-merge":
+          vmUrl = `${CLAUDE_HOST}/pr/merge`;
+          method = "POST";
           break;
         default:
           adapter.sendText(userId, `Unknown action command: ${command}`);
@@ -427,7 +508,12 @@ function createRelay(adapters) {
 
       // Cache skills from clone/switch responses
       if (data.skills) {
-        skillCache = data.skills;
+        updateSkillCache(data.skills);
+      }
+
+      // Mark onboarded after successful clone
+      if (command === "clone") {
+        onboarded = true;
       }
 
       console.log(`[ACTION_DONE] ${userId}: ${command}`);

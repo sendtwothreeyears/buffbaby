@@ -1,5 +1,5 @@
 const express = require("express");
-const { spawn, execSync } = require("child_process");
+const { spawn, execSync, execFileSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
@@ -490,7 +490,7 @@ app.post("/clone", async (req, res) => {
       console.log(`[CLONE] Pulled existing repo: ${repoName}`);
     } else {
       // Clone new repo — use execFileSync to avoid shell injection via URL
-      const { execFileSync } = require("child_process");
+
       execFileSync("git", ["clone", url, repoPath], { timeout: 120_000, encoding: "utf-8" });
       console.log(`[CLONE] Cloned: ${repoName}`);
     }
@@ -597,6 +597,149 @@ app.get("/status", (_req, res) => {
     console.error(`[STATUS_ERR] ${err.message}`);
     res.json({ text: `Working directory: ${cwd}\nGit status unavailable: ${err.message}` });
   }
+});
+
+// GET /branch — list branches, mark current
+app.get("/branch", (_req, res) => {
+  lastActivity = Date.now();
+
+  const cwd = getCurrentCwd();
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.json({ text: "No git repo found. Use 'clone <url>' to get started." });
+  }
+
+  try {
+    const output = execSync("git branch --no-color", { cwd, timeout: 5000, encoding: "utf-8" }).trim();
+    if (!output) {
+      return res.json({ text: "No branches found." });
+    }
+    res.json({ text: `Branches:\n${output}` });
+  } catch (err) {
+    console.error(`[BRANCH_ERR] ${err.message}`);
+    res.status(500).json({ error: "branch_failed", message: err.message });
+  }
+});
+
+// POST /checkout — switch or create+switch branch
+app.post("/checkout", (req, res) => {
+  const { name, create } = req.body || {};
+
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ error: "bad_request", message: "Branch name is required" });
+  }
+
+  // Sanitize branch name — allow alphanumeric, hyphens, underscores, slashes, dots
+  const sanitized = name.replace(/[^a-zA-Z0-9._\/-]/g, "");
+  if (!sanitized) {
+    return res.status(400).json({ error: "bad_request", message: "Invalid branch name" });
+  }
+
+  const cwd = getCurrentCwd();
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.json({ text: "No git repo found. Use 'clone <url>' to get started." });
+  }
+
+  lastActivity = Date.now();
+
+  try {
+    const args = create ? ["-b", sanitized] : [sanitized];
+
+    execFileSync("git", ["checkout", ...args], { cwd, timeout: 10_000, encoding: "utf-8" });
+
+    const action = create ? "Created and switched to" : "Switched to";
+    console.log(`[CHECKOUT] ${action} ${sanitized}`);
+    res.json({ text: `${action} branch ${sanitized}.` });
+  } catch (err) {
+    console.error(`[CHECKOUT_ERR] ${err.message}`);
+    res.status(500).json({ error: "checkout_failed", message: err.message });
+  }
+});
+
+// POST /pr/create — create PR from current branch
+app.post("/pr/create", (req, res) => {
+  const cwd = getCurrentCwd();
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.status(400).json({ error: "no_repo", message: "No git repo found." });
+  }
+
+  if (busy) {
+    return res.status(409).json({ error: "busy", message: "A command is already in progress" });
+  }
+
+  busy = true;
+  lastActivity = Date.now();
+
+  try {
+
+    const output = execFileSync("gh", ["pr", "create", "--fill"], { cwd, timeout: 30_000, encoding: "utf-8" }).trim();
+
+    const prUrlMatch = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+    console.log(`[PR_CREATE] ${prUrlMatch ? prUrlMatch[0] : output}`);
+    res.json({ text: output, prUrl: prUrlMatch ? prUrlMatch[0] : null });
+  } catch (err) {
+    console.error(`[PR_CREATE_ERR] ${err.message}`);
+    res.status(500).json({ error: "pr_create_failed", message: err.stderr || err.message });
+  } finally {
+    busy = false;
+  }
+});
+
+// GET /pr/status — show CI status and review state
+app.get("/pr/status", (_req, res) => {
+  const cwd = getCurrentCwd();
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.status(400).json({ error: "no_repo", message: "No git repo found." });
+  }
+
+  lastActivity = Date.now();
+
+  try {
+
+    const output = execFileSync("gh", ["pr", "status"], { cwd, timeout: 15_000, encoding: "utf-8" }).trim();
+    res.json({ text: output });
+  } catch (err) {
+    console.error(`[PR_STATUS_ERR] ${err.message}`);
+    res.status(500).json({ error: "pr_status_failed", message: err.stderr || err.message });
+  }
+});
+
+// POST /pr/merge — merge current PR
+app.post("/pr/merge", (req, res) => {
+  const cwd = getCurrentCwd();
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.status(400).json({ error: "no_repo", message: "No git repo found." });
+  }
+
+  if (busy) {
+    return res.status(409).json({ error: "busy", message: "A command is already in progress" });
+  }
+
+  busy = true;
+  lastActivity = Date.now();
+
+  try {
+
+    const output = execFileSync("gh", ["pr", "merge", "--auto", "--squash"], { cwd, timeout: 30_000, encoding: "utf-8" }).trim();
+    console.log(`[PR_MERGE] ${output.substring(0, 80)}`);
+    res.json({ text: output });
+  } catch (err) {
+    console.error(`[PR_MERGE_ERR] ${err.message}`);
+    res.status(500).json({ error: "pr_merge_failed", message: err.stderr || err.message });
+  } finally {
+    busy = false;
+  }
+});
+
+// GET /onboarded — check if user has been onboarded
+app.get("/onboarded", (_req, res) => {
+  const flag = getConfig("onboarded");
+  res.json({ onboarded: flag === "true" });
+});
+
+// POST /onboarded — mark user as onboarded
+app.post("/onboarded", (_req, res) => {
+  setConfig("onboarded", "true");
+  res.json({ ok: true });
 });
 
 // GET /skills — return cached skills for current repo

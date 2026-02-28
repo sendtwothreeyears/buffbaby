@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --production
 
-COPY server.js ./
+COPY server.js relay-core.js ./
+COPY adapters/ ./adapters/
 
 RUN chown -R appuser:appuser /app
 USER appuser
