@@ -27,8 +27,8 @@ let rest;
 // Currently registered skill command names (not including core commands)
 let registeredSkillNames = [];
 
-// Typing indicator intervals per user
-const typingIntervals = new Map();
+// Thinking message per user (deleted when response arrives)
+const thinkingMessages = new Map();
 
 function isConfigured() {
   return !!(DISCORD_BOT_TOKEN && DISCORD_CHANNEL_ID);
@@ -612,8 +612,8 @@ module.exports = {
 
       const userId = `discord:${authorId}`;
 
-      // Show "typing..." indicator while processing (refreshes every 8s)
-      module.exports.startTyping(userId);
+      // Show "Thinking..." message while processing
+      module.exports.startThinking(userId);
 
       console.log(`[INBOUND] ${userId}: ${body.substring(0, 80)}`);
       onMessage(userId, body);
@@ -688,29 +688,27 @@ module.exports = {
     await registerGuildCommands(commands);
   },
 
-  startTyping(userId) {
-    this.stopTyping(userId); // clear any existing
+  async startThinking(userId) {
+    this.stopThinking(userId); // clear any existing
     if (!targetChannel) return;
-    targetChannel.sendTyping().catch(() => {});
-    // Discord typing lasts ~10s, refresh every 8s
-    const interval = setInterval(() => {
-      targetChannel.sendTyping().catch(() => {});
-    }, 8000);
-    typingIntervals.set(userId, interval);
+    try {
+      const msg = await targetChannel.send("••• BuffBaby is thinking...");
+      thinkingMessages.set(userId, msg);
+    } catch { /* best effort */ }
   },
 
-  stopTyping(userId) {
-    const interval = typingIntervals.get(userId);
-    if (interval) {
-      clearInterval(interval);
-      typingIntervals.delete(userId);
+  stopThinking(userId) {
+    const msg = thinkingMessages.get(userId);
+    if (msg) {
+      msg.delete().catch(() => {});
+      thinkingMessages.delete(userId);
     }
   },
 
   async sendText(userId, text) {
     // Clear progress tracker — any non-progress message means the command is done or errored
     progressMessages.delete(userId);
-    this.stopTyping(userId);
+    this.stopThinking(userId);
     try {
       const chunks = chunkText(text, MAX_MSG);
       for (const chunk of chunks) {
@@ -762,7 +760,7 @@ module.exports = {
 
   async sendVMResponse(userId, data) {
     progressMessages.delete(userId);
-    this.stopTyping(userId);
+    this.stopThinking(userId);
 
     try {
       const files = await buildAttachments(data.images);
