@@ -18,6 +18,13 @@ if (discord.isConfigured()) {
   console.log("[STARTUP] Discord adapter: not configured (skipping)");
 }
 
+const telegram = require("./adapters/telegram");
+if (telegram.isConfigured()) {
+  adapters.push(telegram);
+} else {
+  console.log("[STARTUP] Telegram adapter: not configured (skipping)");
+}
+
 if (adapters.length === 0) {
   console.error("No adapters configured. Set env vars for at least one channel.");
   process.exit(1);

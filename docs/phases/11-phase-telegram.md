@@ -19,7 +19,7 @@ Deliverables:
 
 ## Tasks
 
-- [ ] Build Telegram adapter — bot connects, receives messages, forwards to relay core, sends responses + media
+- [x] Build Telegram adapter — bot connects, receives messages, forwards to relay core, sends responses + media
   - Plan: `/workflow:plan Telegram adapter — Bot API, message handling, photo delivery, progress updates via message edits`
   - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-telegram-adapter-plan.md`
 
