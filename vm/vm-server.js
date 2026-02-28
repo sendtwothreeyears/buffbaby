@@ -8,9 +8,11 @@ const { getConfig, setConfig, logCommand, getArtifact, deleteExpiredArtifacts } 
 const { scanSkills } = require("./skills");
 const { generateView, renderExpiredPage, VIEWS_DIR } = require("./web-views");
 const { classifyOutput, createInlineSummary } = require("./output-classifier");
+const tmux = require("./tmux");
 
 const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP, RELAY_CALLBACK_URL = "" } = process.env;
 const REPOS_DIR = process.env.REPOS_DIR || "/data/repos";
+const MAX_THREADS = Number(process.env.MAX_THREADS) || 5;
 
 // Fail-fast env var validation
 if (!ANTHROPIC_API_KEY) {
@@ -64,6 +66,24 @@ let skipContinue = false; // Set by POST /clear — next /command starts a fresh
 let pendingImages = [];
 
 app.use(express.json());
+
+// --- Thread management (tmux-backed sessions) ---
+const activeThreads = new Map(); // threadId -> { threadId, type, dir, command, createdBy, createdAt }
+
+function resolveThreadDir(dir) {
+  const resolved = path.resolve(REPOS_DIR, dir);
+  if (!resolved.startsWith(REPOS_DIR + "/") && resolved !== REPOS_DIR) {
+    throw new Error("Invalid directory: path traversal detected");
+  }
+  if (!fsSync.existsSync(resolved)) {
+    throw new Error("Invalid directory: not found");
+  }
+  return resolved;
+}
+
+function tmuxSessionName(threadId) {
+  return `thread-${threadId}`;
+}
 
 // Collect uncommitted git diffs after command execution
 function collectDiffs(cwd) {
@@ -754,6 +774,163 @@ app.get("/skills", (req, res) => {
   const refresh = req.query.refresh === "true";
   const skills = scanSkills(cwd, { useCache: !refresh });
   res.json({ skills, repoPath: cwd });
+});
+
+// --- Thread endpoints (independent of busy flag) ---
+
+// POST /thread/create — spawn a tmux session for a Discord thread
+app.post("/thread/create", async (req, res) => {
+  const { threadId, type, dir, command, createdBy } = req.body || {};
+
+  if (!threadId || !type || !dir || !command) {
+    return res.status(400).json({ error: "Missing required fields: threadId, type, dir, command" });
+  }
+  if (type !== "terminal" && type !== "agent") {
+    return res.status(400).json({ error: "type must be 'terminal' or 'agent'" });
+  }
+
+  let resolved;
+  try {
+    resolved = resolveThreadDir(dir);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  // Check thread count
+  const sessions = await tmux.listSessions();
+  const threadSessions = sessions.filter(s => s.startsWith("thread-"));
+  if (threadSessions.length >= MAX_THREADS) {
+    return res.status(429).json({ error: `Max threads exceeded (${MAX_THREADS})` });
+  }
+
+  const sessionName = tmuxSessionName(threadId);
+
+  // Kill stale session with same name if it exists
+  if (await tmux.sessionExists(sessionName)) {
+    await tmux.killSession(sessionName);
+  }
+
+  try {
+    if (type === "terminal") {
+      await tmux.createSession(sessionName, resolved, command);
+    } else {
+      // Agent: start a shell, then send the claude command
+      await tmux.createSession(sessionName, resolved, "bash");
+      const claudeCmd = `claude -p --dangerously-skip-permissions "${command.replace(/"/g, '\\"')}"`;
+      await tmux.sendInput(sessionName, claudeCmd);
+    }
+
+    activeThreads.set(threadId, {
+      threadId,
+      type,
+      dir,
+      command,
+      createdBy: createdBy || "unknown",
+      createdAt: new Date().toISOString(),
+    });
+
+    console.log(`[THREAD] Created ${type} session: ${sessionName} (dir: ${dir})`);
+    res.status(201).json({ created: true, tmuxSession: sessionName });
+  } catch (err) {
+    console.error(`[THREAD_ERR] Create failed: ${err.message}`);
+    res.status(500).json({ error: `Failed to create session: ${err.message}` });
+  }
+});
+
+// POST /thread/:id/input — send text to a thread's stdin
+app.post("/thread/:id/input", async (req, res) => {
+  const threadId = req.params.id;
+  const { text } = req.body || {};
+
+  if (!text || typeof text !== "string") {
+    return res.status(400).json({ error: "text is required" });
+  }
+
+  const threadInfo = activeThreads.get(threadId);
+  if (!threadInfo) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
+
+  const sessionName = tmuxSessionName(threadId);
+  if (!(await tmux.sessionExists(sessionName))) {
+    return res.status(410).json({ error: "Thread ended" });
+  }
+
+  try {
+    if (threadInfo.type === "agent") {
+      // Check if the claude process is still running
+      const running = await tmux.getProcessRunning(sessionName);
+      if (!running) {
+        // Process exited back to shell — spawn a --continue session
+        const claudeCmd = `claude -p --continue --dangerously-skip-permissions "${text.replace(/"/g, '\\"')}"`;
+        await tmux.sendInput(sessionName, claudeCmd);
+      } else {
+        await tmux.sendInput(sessionName, text);
+      }
+    } else {
+      await tmux.sendInput(sessionName, text);
+    }
+    res.json({ sent: true });
+  } catch (err) {
+    console.error(`[THREAD_ERR] Input failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /thread/:id/output — read new output from a thread's log file
+app.get("/thread/:id/output", async (req, res) => {
+  const threadId = req.params.id;
+  const since = Number(req.query.since) || 0;
+
+  if (!activeThreads.has(threadId)) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
+
+  const sessionName = tmuxSessionName(threadId);
+  const { output, offset } = tmux.readOutput(sessionName, since);
+  const processRunning = await tmux.getProcessRunning(sessionName);
+  const exitCode = processRunning ? null : await tmux.getExitCode(sessionName);
+
+  res.json({ output, offset, processRunning, exitCode });
+});
+
+// POST /thread/:id/kill — kill a thread session
+app.post("/thread/:id/kill", async (req, res) => {
+  const threadId = req.params.id;
+  const threadInfo = activeThreads.get(threadId);
+
+  if (!threadInfo) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
+
+  const sessionName = tmuxSessionName(threadId);
+  const summary = tmux.getSummary(sessionName);
+
+  await tmux.killSession(sessionName);
+  activeThreads.delete(threadId);
+
+  console.log(`[THREAD] Killed session: ${sessionName}`);
+  res.json({ killed: true, summary });
+});
+
+// GET /threads — list all active thread sessions
+app.get("/threads", async (_req, res) => {
+  const sessions = await tmux.listSessions();
+  const threadSessions = sessions.filter(s => s.startsWith("thread-"));
+
+  const threads = [];
+  for (const session of threadSessions) {
+    const threadId = session.replace("thread-", "");
+    const meta = activeThreads.get(threadId) || { threadId, type: "unknown", dir: "unknown", command: "unknown" };
+    const processRunning = await tmux.getProcessRunning(session);
+    threads.push({
+      ...meta,
+      status: processRunning ? "running" : "exited",
+      processRunning,
+    });
+  }
+
+  res.json({ threads });
 });
 
 // POST /cancel — kill the active Claude Code process
