@@ -62,6 +62,7 @@ async function registerGuildCommands(commandsJson) {
 
 function buildAllCommands(skills) {
   const commands = CORE_COMMANDS.map(c => c.toJSON());
+  const seen = new Set(CORE_COMMAND_NAMES);
 
   for (const skill of skills) {
     // Discord command names: lowercase, 1-32 chars, alphanumeric + hyphens + underscores
@@ -72,7 +73,8 @@ function buildAllCommands(skills) {
       .replace(/^-|-$/g, "")
       .slice(0, 32);
 
-    if (!name || CORE_COMMAND_NAMES.has(name)) continue;
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
 
     const desc = (skill.description || name).slice(0, 100);
     commands.push(new SlashCommandBuilder().setName(name).setDescription(desc).toJSON());
@@ -216,14 +218,26 @@ module.exports = {
     });
 
     client.on("interactionCreate", async (interaction) => {
-      if (interaction.isAutocomplete()) {
-        await handleAutocomplete(interaction);
-        return;
-      }
+      try {
+        if (interaction.isAutocomplete()) {
+          await handleAutocomplete(interaction);
+          return;
+        }
 
-      if (interaction.isChatInputCommand()) {
-        await handleSlashCommand(interaction, onMessage);
-        return;
+        if (interaction.isChatInputCommand()) {
+          await handleSlashCommand(interaction, onMessage);
+          return;
+        }
+      } catch (err) {
+        console.error(`[DISCORD_INTERACTION_ERR] ${err.message}`);
+        try {
+          const reply = { content: "Something went wrong.", ephemeral: true };
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(reply);
+          } else {
+            await interaction.reply(reply);
+          }
+        } catch { /* best effort */ }
       }
     });
 
