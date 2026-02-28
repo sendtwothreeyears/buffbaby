@@ -1077,7 +1077,7 @@ app.listen(Number(PORT), () => {
   }
 
   // Start test app server on port 8080 (for screenshot testing, not production)
-  if (ENABLE_TEST_APP) {
+  if (ENABLE_TEST_APP === "true") {
     const testAppPath = path.join(__dirname, "test-app");
     const { exec } = require("child_process");
     exec(`npx -y serve ${testAppPath} -l 8080 -s`, (err) => {
