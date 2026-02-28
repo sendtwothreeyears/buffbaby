@@ -43,7 +43,7 @@ COPY package.json ./
 RUN npm install --production
 
 # Copy application files
-COPY vm-server.js db.js skills.js CLAUDE.md ./
+COPY vm-server.js db.js skills.js output-classifier.js web-views.js CLAUDE.md ./
 COPY test-app/ ./test-app/
 
 # Create directories and set ownership (Fly Volume mounts overlay these — dirs created at runtime too)
