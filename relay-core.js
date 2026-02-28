@@ -19,11 +19,26 @@ function getState(userId) {
   return userState.get(userId);
 }
 
-function createRelay(adapter) {
+function createRelay(adapters) {
   const app = express();
 
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json()); // for VM callbacks
+
+  // --- Adapter registry ---
+  const adapterMap = new Map();
+  for (const adapter of adapters) {
+    adapterMap.set(adapter.name, adapter);
+  }
+
+  function getAdapterForUser(userId) {
+    const prefix = userId.split(":")[0];
+    const adapter = adapterMap.get(prefix);
+    if (!adapter) {
+      console.warn(`[ROUTE_WARN] No adapter for prefix "${prefix}", falling back to ${adapters[0].name}`);
+    }
+    return adapter || adapters[0];
+  }
 
   // --- Health endpoint ---
   app.get("/health", (_req, res) => {
@@ -66,7 +81,7 @@ function createRelay(adapter) {
       const truncated = message.length > MAX_PROGRESS_LENGTH
         ? message.slice(0, MAX_PROGRESS_LENGTH - 20) + "\n[truncated]"
         : message;
-      adapter.sendText(userId, truncated);
+      getAdapterForUser(userId).sendProgress(userId, truncated);
     }
 
     res.sendStatus(200);
@@ -86,7 +101,7 @@ function createRelay(adapter) {
       } else if (["cancel", "c"].includes(normalized)) {
         handleCancel(userId, state);
       } else {
-        adapter.sendText(userId, "Reply *approve* to create PR or *reject* to undo changes.");
+        getAdapterForUser(userId).sendText(userId, "Reply approve to create PR or reject to undo changes.");
       }
       return;
     }
@@ -99,12 +114,12 @@ function createRelay(adapter) {
       }
       if (state.queue.length >= MAX_QUEUE_DEPTH) {
         console.log(`[QUEUE_FULL] ${userId}`);
-        adapter.sendText(userId, "Queue full, please wait for current tasks to finish.");
+        getAdapterForUser(userId).sendText(userId, "Queue full, please wait for current tasks to finish.");
         return;
       }
       state.queue.push(text);
       console.log(`[QUEUED] ${userId} (depth: ${state.queue.length})`);
-      adapter.sendText(userId, "Got it, I'll process this next.");
+      getAdapterForUser(userId).sendText(userId, "Got it, I'll process this next.");
       return;
     }
 
@@ -132,15 +147,15 @@ function createRelay(adapter) {
         state.approvalTimer = setTimeout(() => {
           state.state = "idle";
           state.approvalTimer = null;
-          adapter.sendText(userId, "Approval timed out (30 min). Changes preserved on disk.");
+          getAdapterForUser(userId).sendText(userId, "Approval timed out (30 min). Changes preserved on disk.");
         }, APPROVAL_TIMEOUT_MS);
 
-        await adapter.sendApprovalPrompt(userId, data);
+        await getAdapterForUser(userId).sendApprovalPrompt(userId, data);
         return; // Don't process queue — waiting for user response
       }
 
       // Normal completion — send response and process queue
-      await adapter.sendVMResponse(userId, data);
+      await getAdapterForUser(userId).sendVMResponse(userId, data);
     } catch (err) {
       console.error(`[ERROR] ${userId}: ${err.message}`);
       const message =
@@ -149,11 +164,11 @@ function createRelay(adapter) {
           : err.status === 408
             ? "That took too long. Try a simpler request."
             : "Something went wrong. Try again in a moment.";
-      await adapter.sendText(userId, message);
+      await getAdapterForUser(userId).sendText(userId, message);
 
       // Send diffs from error/timeout responses (Claude may have modified files before failing)
       if (err.data?.diffs) {
-        await adapter.sendVMResponse(userId, { diffs: err.data.diffs, diffSummary: err.data.diffSummary });
+        await getAdapterForUser(userId).sendVMResponse(userId, { diffs: err.data.diffs, diffSummary: err.data.diffSummary });
       }
     }
 
@@ -194,18 +209,18 @@ function createRelay(adapter) {
       }
 
       if (data.prUrl) {
-        await adapter.sendText(userId, `PR created: ${data.prUrl}`);
+        await getAdapterForUser(userId).sendText(userId, `PR created: ${data.prUrl}`);
       } else {
-        await adapter.sendText(userId, data.text || "Approved.");
+        await getAdapterForUser(userId).sendText(userId, data.text || "Approved.");
       }
     } catch (err) {
       console.error(`[APPROVE_ERR] ${userId}: ${err.message}`);
-      await adapter.sendText(userId, `Failed to create PR: ${err.message}\nReply *approve* to retry.`);
+      await getAdapterForUser(userId).sendText(userId, `Failed to create PR: ${err.message}\nReply approve to retry.`);
       state.state = "awaiting_approval";
       state.approvalTimer = setTimeout(() => {
         state.state = "idle";
         state.approvalTimer = null;
-        adapter.sendText(userId, "Approval timed out.");
+        getAdapterForUser(userId).sendText(userId, "Approval timed out.");
       }, APPROVAL_TIMEOUT_MS);
       return;
     }
@@ -225,10 +240,10 @@ function createRelay(adapter) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approved: false }),
       });
-      await adapter.sendText(userId, "Changes reverted. Ready for next command.");
+      await getAdapterForUser(userId).sendText(userId, "Changes reverted. Ready for next command.");
     } catch (err) {
       console.error(`[REJECT_ERR] ${userId}: ${err.message}`);
-      await adapter.sendText(userId, `Failed to revert: ${err.message}. Changes may still be on disk.`);
+      await getAdapterForUser(userId).sendText(userId, `Failed to revert: ${err.message}. Changes may still be on disk.`);
     }
 
     state.state = "idle";
@@ -250,7 +265,7 @@ function createRelay(adapter) {
 
     state.state = "idle";
     state.queue.length = 0;
-    await adapter.sendText(userId, "Cancelled. Changes reverted. Ready for next command.");
+    await getAdapterForUser(userId).sendText(userId, "Cancelled. Changes reverted. Ready for next command.");
   }
 
   async function handleCancelWorking(userId, state) {
@@ -267,7 +282,7 @@ function createRelay(adapter) {
     state.state = "idle";
     state.queue.length = 0;
     state.abortController = null;
-    await adapter.sendText(userId, "Cancelled. Ready for next command.");
+    await getAdapterForUser(userId).sendText(userId, "Cancelled. Ready for next command.");
   }
 
   // --- HTTP to VM with timeout + cold-start retry ---
@@ -280,7 +295,7 @@ function createRelay(adapter) {
       const res = await fetch(`${CLAUDE_HOST}/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, callbackPhone: userId }),
+        body: JSON.stringify({ text, callbackUserId: userId }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -299,7 +314,7 @@ function createRelay(adapter) {
       // Cold-start retry: send "Waking up..." and poll /health until VM is ready
       if (err.cause?.code === "ECONNREFUSED" || err.message.includes("ECONNREFUSED")) {
         console.log("[COLD-START] VM not reachable, sending wake-up notice");
-        await adapter.sendText(userId, "\u23f3 Waking up your VM...");
+        await getAdapterForUser(userId).sendText(userId, "\u23f3 Waking up your VM...");
 
         const MAX_WAIT = 30_000;
         const POLL_INTERVAL = 3_000;
@@ -331,12 +346,26 @@ function createRelay(adapter) {
     }
   }
 
-  // --- Register adapter routes ---
-  adapter.registerRoutes(app, onMessage);
+  // --- Register all adapter routes ---
+  for (const adapter of adapters) {
+    adapter.registerRoutes(app, onMessage);
+  }
+
+  // --- Shutdown support ---
+  app.shutdownAdapters = async () => {
+    for (const adapter of adapters) {
+      if (adapter.shutdown) {
+        try { await adapter.shutdown(); } catch (e) { console.error(`[SHUTDOWN] ${adapter.name}: ${e.message}`); }
+      }
+    }
+  };
 
   // --- Startup logging ---
   console.log(`[STARTUP] VM target: ${CLAUDE_HOST}`);
-  if (adapter.logStartup) adapter.logStartup();
+  console.log(`[STARTUP] Adapters: ${adapters.map(a => a.name).join(", ")}`);
+  for (const adapter of adapters) {
+    if (adapter.logStartup) adapter.logStartup();
+  }
 
   return app;
 }

@@ -1,4 +1,5 @@
 const twilio = require("twilio");
+const { chunkText, truncateAtFileBoundary } = require("./utils");
 
 const {
   TWILIO_ACCOUNT_SID,
@@ -8,42 +9,14 @@ const {
   ALLOWED_PHONE_NUMBERS,
 } = process.env;
 
-// Validate Twilio-specific env vars
-const required = [
-  "TWILIO_ACCOUNT_SID",
-  "TWILIO_AUTH_TOKEN",
-  "TWILIO_WHATSAPP_NUMBER",
-  "PUBLIC_URL",
-  "ALLOWED_PHONE_NUMBERS",
-];
-for (const key of required) {
-  if (!process.env[key]) {
-    console.error(`Missing required env var: ${key}`);
-    process.exit(1);
-  }
-}
-
-const allowlist = new Set(ALLOWED_PHONE_NUMBERS.split(",").map((n) => n.trim()));
-const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-
 // --- Constants ---
 const MAX_MSG = 4096;
 const MAX_CHUNK = 1600; // Twilio WhatsApp sandbox limit
 
-// --- Diff formatting ---
-function truncateAtFileBoundary(diff, maxChars) {
-  const FILE_HEADER = "diff --git ";
-  const files = diff.split(FILE_HEADER).filter(Boolean);
-
-  let result = "";
-
-  for (const file of files) {
-    const entry = FILE_HEADER + file;
-    if (result.length + entry.length > maxChars) break;
-    result += entry;
-  }
-
-  return result || diff.substring(0, maxChars);
+function isConfigured() {
+  return !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN &&
+            TWILIO_WHATSAPP_NUMBER && PUBLIC_URL &&
+            ALLOWED_PHONE_NUMBERS);
 }
 
 function formatDiffMessage(diffs, diffSummary, budget) {
@@ -84,20 +57,16 @@ function formatApprovalPrompt(data) {
   return msg.slice(0, MAX_MSG);
 }
 
-// --- Twilio webhook signature validation ---
-const webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
-  url: PUBLIC_URL + "/webhook",
-});
+// --- Lazy-initialized Twilio client and webhook validator ---
+let client, webhookValidator, allowlist;
 
 // --- Outbound WhatsApp helper ---
 async function sendWhatsAppMessage(to, body, mediaUrls = []) {
-  const whatsappTo = `whatsapp:${to}`;
+  const phone = to.replace(/^whatsapp:/, "");
+  const whatsappTo = `whatsapp:${phone}`;
   try {
     // Split long messages into chunks
-    const chunks = [];
-    for (let i = 0; i < body.length; i += MAX_CHUNK) {
-      chunks.push(body.substring(i, i + MAX_CHUNK));
-    }
+    const chunks = chunkText(body, MAX_CHUNK);
 
     // First chunk gets the first media attachment (if any)
     const firstParams = {
@@ -144,15 +113,24 @@ async function sendWhatsAppMessage(to, body, mediaUrls = []) {
 module.exports = {
   name: "whatsapp",
 
+  isConfigured,
+
   registerRoutes(app, onMessage) {
+    // Initialize Twilio lazily — only when this adapter is actually used
+    client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+    webhookValidator = twilio.webhook(TWILIO_AUTH_TOKEN, {
+      url: PUBLIC_URL + "/webhook",
+    });
+    allowlist = new Set(ALLOWED_PHONE_NUMBERS.split(",").map((n) => n.trim()));
+
     app.post("/webhook", webhookValidator, async (req, res) => {
       const from = req.body.From;
-      const userId = from.replace(/^whatsapp:/, "");
+      const phone = from.replace(/^whatsapp:/, "");
       const body = (req.body.Body || "").trim();
 
       // Phone allowlist
-      if (!allowlist.has(userId)) {
-        console.log(`[BLOCKED] ${userId}`);
+      if (!allowlist.has(phone)) {
+        console.log(`[BLOCKED] ${phone}`);
         return res.sendStatus(200);
       }
 
@@ -164,19 +142,23 @@ module.exports = {
       // Media check (text-only) — before empty-body check so
       // image-only messages get the right error ("text only" not "empty")
       if (parseInt(req.body.NumMedia || "0", 10) > 0) {
-        return sendWhatsAppMessage(userId, "I can only process text messages for now.");
+        return sendWhatsAppMessage(phone, "I can only process text messages for now.");
       }
 
       // Empty message check
       if (!body) {
-        return sendWhatsAppMessage(userId, "I received an empty message.");
+        return sendWhatsAppMessage(phone, "I received an empty message.");
       }
 
-      onMessage(userId, body);
+      onMessage(`whatsapp:${phone}`, body);
     });
   },
 
   sendText(userId, text) {
+    return sendWhatsAppMessage(userId, text);
+  },
+
+  sendProgress(userId, text) {
     return sendWhatsAppMessage(userId, text);
   },
 
