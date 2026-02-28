@@ -1,5 +1,5 @@
 const express = require("express");
-const { spawn, execSync } = require("child_process");
+const { spawn, execSync, execFileSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
@@ -490,7 +490,7 @@ app.post("/clone", async (req, res) => {
       console.log(`[CLONE] Pulled existing repo: ${repoName}`);
     } else {
       // Clone new repo — use execFileSync to avoid shell injection via URL
-      const { execFileSync } = require("child_process");
+
       execFileSync("git", ["clone", url, repoPath], { timeout: 120_000, encoding: "utf-8" });
       console.log(`[CLONE] Cloned: ${repoName}`);
     }
@@ -643,7 +643,7 @@ app.post("/checkout", (req, res) => {
 
   try {
     const args = create ? ["-b", sanitized] : [sanitized];
-    const { execFileSync } = require("child_process");
+
     execFileSync("git", ["checkout", ...args], { cwd, timeout: 10_000, encoding: "utf-8" });
 
     const action = create ? "Created and switched to" : "Switched to";
@@ -670,7 +670,7 @@ app.post("/pr/create", (req, res) => {
   lastActivity = Date.now();
 
   try {
-    const { execFileSync } = require("child_process");
+
     const output = execFileSync("gh", ["pr", "create", "--fill"], { cwd, timeout: 30_000, encoding: "utf-8" }).trim();
 
     const prUrlMatch = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
@@ -694,7 +694,7 @@ app.get("/pr/status", (_req, res) => {
   lastActivity = Date.now();
 
   try {
-    const { execFileSync } = require("child_process");
+
     const output = execFileSync("gh", ["pr", "status"], { cwd, timeout: 15_000, encoding: "utf-8" }).trim();
     res.json({ text: output });
   } catch (err) {
@@ -718,7 +718,7 @@ app.post("/pr/merge", (req, res) => {
   lastActivity = Date.now();
 
   try {
-    const { execFileSync } = require("child_process");
+
     const output = execFileSync("gh", ["pr", "merge", "--auto", "--squash"], { cwd, timeout: 30_000, encoding: "utf-8" }).trim();
     console.log(`[PR_MERGE] ${output.substring(0, 80)}`);
     res.json({ text: output });

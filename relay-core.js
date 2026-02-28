@@ -241,8 +241,9 @@ function createRelay(adapters) {
       return;
     }
 
-    // Show welcome message on first interaction (non-blocking)
+    // Show welcome message on first interaction (non-blocking, fire-and-forget)
     if (onboarded === null) {
+      onboarded = true; // Prevent duplicate checks from rapid messages
       checkAndShowOnboarding(userId);
     }
 
