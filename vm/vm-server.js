@@ -67,6 +67,12 @@ let pendingImages = [];
 
 app.use(express.json());
 
+// Serve the current working directory (cloned repo) at /site/
+app.use("/site", (req, res, next) => {
+  lastActivity = Date.now();
+  express.static(getCurrentCwd())(req, res, next);
+});
+
 // --- Thread management (tmux-backed sessions) ---
 const activeThreads = new Map(); // threadId -> { threadId, type, dir, command, createdBy, createdAt }
 
