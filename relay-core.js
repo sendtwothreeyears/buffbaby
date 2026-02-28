@@ -224,17 +224,39 @@ function createRelay(adapters) {
 
   // --- Process queued messages ---
   function processQueue(userId, state) {
-    if (state.queue.length > 0) {
-      const next = state.queue.shift();
-      console.log(`[DEQUEUED] ${userId} (remaining: ${state.queue.length})`);
-      processCommand(userId, next, state).catch((err) => {
+    if (state.queue.length === 0) {
+      state.state = "idle";
+      return;
+    }
+
+    const next = state.queue.shift();
+    console.log(`[DEQUEUED] ${userId} (remaining: ${state.queue.length})`);
+
+    // Classify dequeued message through the same router as fresh messages
+    const classified = classifyCommand(next);
+
+    if (classified.type === "meta") {
+      handleMetaCommand(userId, classified);
+      // Meta-commands are synchronous — continue draining
+      processQueue(userId, state);
+      return;
+    }
+
+    if (classified.type === "action") {
+      handleActionCommand(userId, classified, state).catch((err) => {
         state.state = "idle";
         state.queue.length = 0;
-        console.error(`[FATAL] ${userId}: unhandled error in queued processCommand: ${err.message}`);
+        console.error(`[FATAL] ${userId}: unhandled error in queued handleActionCommand: ${err.message}`);
       });
-    } else {
-      state.state = "idle";
+      return;
     }
+
+    // Freeform → Claude Code
+    processCommand(userId, next, state).catch((err) => {
+      state.state = "idle";
+      state.queue.length = 0;
+      console.error(`[FATAL] ${userId}: unhandled error in queued processCommand: ${err.message}`);
+    });
   }
 
   // --- Meta-command handlers (respond locally, no VM call) ---
