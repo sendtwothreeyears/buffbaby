@@ -1,40 +1,42 @@
-# Phase 12: Channel Polish
+# Phase 12: Mobile Development Cockpit
 
 **Stage:** Polish & Extend
 **Depends on:** Phases 10, 11 (Discord + Telegram both working)
-**Done when:** Approve a PR via Discord button tap. Use Telegram inline keyboard to reject. `/help` returns a command list on all three channels. `status` returns VM state. Message queuing works during active commands.
+**Done when:** Clone repos, switch between them, check status, get help — all from phone. Long output summarized with web view links. Project skills auto-discovered. PR lifecycle from phone.
 
 ## What You Build
 
-Channel-native UX enhancements and resilience features that make BuffBaby feel polished for daily use.
+Transform the WhatsApp/Discord/Telegram interface from a raw Claude Code terminal into a comprehensive phone-first development experience. Engineers clone repos, run project-specific skills, and view output properly — all from their phone, no laptop needed.
 
-Deliverables:
-- **Discord:** Approve/reject as button components (not text). Status updates as rich embeds (colored sidebar, fields). Bot slash command registration (`/status`, `/help`, `/cancel`).
-- **Telegram:** Approve/reject as inline keyboard buttons. `/help` and `/status` in the bot commands menu (visible in Telegram UI).
-- **WhatsApp:** No changes needed — text-based approve/reject already works.
-- **All channels:** `/help` command returns available actions and example workflows. `status` command returns current VM state (idle/working, last command, git status). Message queuing during active work (queue incoming messages instead of dropping them, process after current task completes).
-- **Error recovery:** VM health check every 30s. If VM unreachable, notify user: "VM appears to be down." Thrashing detection: 3+ similar errors → offer fresh agent or cancel.
+## Sub-Phases
+
+| Phase | Name | Plan | Status |
+|-------|------|------|--------|
+| 12.1 | Command Routing + Core VM Skills + SQLite | `docs/plans/2026-02-27-phase-12.1-command-routing-plan.md` | active |
+| 12.2 | Smart Output Rendering + Web Views | `docs/plans/2026-02-27-phase-12.2-output-rendering-plan.md` | pending |
+| 12.3 | Project Skill Discovery + Discord Slash Commands | `docs/plans/2026-02-27-phase-12.3-skill-discovery-plan.md` | pending |
+| 12.4 | Polish + Additional Capabilities | `docs/plans/2026-02-27-phase-12.4-polish-commands-plan.md` | pending |
+
+**Dependency chain:** 12.1 → 12.2, 12.3 (parallel) → 12.4
 
 ## Tasks
 
-- [ ] Add Discord buttons, embeds, and slash commands for approve/reject/status/help
-  - Plan: `/workflow:plan Discord channel-native UX — button components, rich embeds, slash commands`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-discord-native-ux-plan.md`
+- [ ] Phase 12.1: Command routing, VM skills (clone/switch/repos/status), SQLite persistence
+  - Ship: `/workflow:ship docs/plans/2026-02-27-phase-12.1-command-routing-plan.md`
 
-- [ ] Add Telegram inline keyboards and bot commands for approve/reject/status/help
-  - Plan: `/workflow:plan Telegram channel-native UX — inline keyboards, bot commands menu`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-telegram-native-ux-plan.md`
+- [ ] Phase 12.2: Output type detection, web view rendering, adapter link formatting
+  - Ship: `/workflow:ship docs/plans/2026-02-27-phase-12.2-output-rendering-plan.md`
 
-- [ ] Add cross-channel resilience: /help, status, message queuing, VM health monitoring, thrashing detection
-  - Plan: `/workflow:plan relay resilience — help command, status, message queuing, health checks, thrashing detection`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-relay-resilience-plan.md`
+- [ ] Phase 12.3: Skill scanning, Discord slash commands, dynamic help
+  - Ship: `/workflow:ship docs/plans/2026-02-27-phase-12.3-skill-discovery-plan.md`
+
+- [ ] Phase 12.4: PR lifecycle, branch management, onboarding flow
+  - Ship: `/workflow:ship docs/plans/2026-02-27-phase-12.4-polish-commands-plan.md`
 
 ## Notes
 
-- Discord buttons use the Interaction API — the bot posts a message with button components, user clicks, bot receives an interaction event. Different from message-based flow.
-- Discord slash commands require registration via the API. They appear in Discord's UI with autocomplete. Register: `/status`, `/help`, `/cancel`. Regular messages still work for commands to Claude Code.
-- Telegram inline keyboards attach to a message. User taps a button, bot receives a callback query. Acknowledge with `answerCallbackQuery` to dismiss the loading spinner.
-- Telegram bot commands menu: set via `setMyCommands` API. Appears when user types `/` in the chat.
-- Message queuing replaces the current "Still working..." rejection. Queue up to 5 messages, process FIFO after current task completes. Reply with position: "Queued (1 ahead of you)."
-- Thrashing detection is simple heuristics: count similar error strings in Claude Code output within a 5-minute window. No ML, no AI — just pattern matching.
-- The three tasks can be worked in parallel (Discord UX, Telegram UX, and cross-channel resilience touch different parts of the codebase).
+- Full plan and brainstorm: `docs/plans/2026-02-27-feat-mobile-dev-cockpit-plan.md`
+- One VM, one relay, one team. CWD is per-VM. Global command queue.
+- SQLite on Fly volume for persistence. `better-sqlite3` (synchronous, no async complexity).
+- Project skills invoked via Claude Code (freeform), not the command router. Router only discovers and displays them.
+- Web views use UUID + 30-min TTL for security. HMAC-signed URLs deferred to production hardening.
