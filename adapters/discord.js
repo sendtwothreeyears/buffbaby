@@ -40,6 +40,13 @@ const CORE_COMMANDS = [
   new SlashCommandBuilder().setName("switch").setDescription("Switch to a different repo")
     .addStringOption(opt => opt.setName("name").setDescription("Repository name").setRequired(true).setAutocomplete(true)),
   new SlashCommandBuilder().setName("repos").setDescription("List all cloned repos"),
+  new SlashCommandBuilder().setName("branch").setDescription("List branches, mark current"),
+  new SlashCommandBuilder().setName("checkout").setDescription("Switch or create a branch")
+    .addStringOption(opt => opt.setName("name").setDescription("Branch name").setRequired(true))
+    .addBooleanOption(opt => opt.setName("create").setDescription("Create a new branch").setRequired(false)),
+  new SlashCommandBuilder().setName("pr-create").setDescription("Create PR from current branch"),
+  new SlashCommandBuilder().setName("pr-status").setDescription("Show CI status and review state"),
+  new SlashCommandBuilder().setName("pr-merge").setDescription("Merge current PR"),
 ];
 
 const CORE_COMMAND_NAMES = new Set(CORE_COMMANDS.map(c => c.name));
@@ -100,6 +107,16 @@ async function handleSlashCommand(interaction, onMessage) {
     text = `clone ${interaction.options.getString("url")}`;
   } else if (commandName === "switch") {
     text = `switch ${interaction.options.getString("name")}`;
+  } else if (commandName === "checkout") {
+    const create = interaction.options.getBoolean("create");
+    const name = interaction.options.getString("name");
+    text = create ? `checkout -b ${name}` : `checkout ${name}`;
+  } else if (commandName === "pr-create") {
+    text = "pr create";
+  } else if (commandName === "pr-status") {
+    text = "pr status";
+  } else if (commandName === "pr-merge") {
+    text = "pr merge";
   } else {
     text = commandName;
   }
