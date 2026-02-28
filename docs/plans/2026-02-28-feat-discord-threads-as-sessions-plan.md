@@ -1,7 +1,7 @@
 ---
 title: "feat: Discord Threads as Sessions (Terminals + Subagents)"
 type: feat
-status: active
+status: completed
 date: 2026-02-28
 brainstorm: docs/brainstorms/2026-02-28-discord-threads-as-sessions-brainstorm.md
 related: docs/roadmap/buffbaby-discord-coworking.md
