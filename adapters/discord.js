@@ -97,7 +97,9 @@ function buildAllCommands(skills) {
     seen.add(name);
 
     const desc = (skill.description || name).slice(0, 100);
-    commands.push(new SlashCommandBuilder().setName(name).setDescription(desc).toJSON());
+    const cmd = new SlashCommandBuilder().setName(name).setDescription(desc)
+      .addStringOption(opt => opt.setName("args").setDescription("Arguments").setRequired(false));
+    commands.push(cmd.toJSON());
   }
 
   return commands;
@@ -131,7 +133,8 @@ async function handleSlashCommand(interaction, onMessage) {
   } else if (commandName === "pr-merge") {
     text = "pr merge";
   } else {
-    text = commandName;
+    const args = interaction.options.getString("args");
+    text = args ? `${commandName} ${args}` : commandName;
   }
 
   // Defer reply — VM work typically takes >3s
@@ -546,6 +549,23 @@ module.exports = {
 
       // Recover any active thread sessions from the VM
       await recoverThreads();
+
+      // Fetch base skills from VM and register as slash commands
+      try {
+        const res = await fetch(`${CLAUDE_HOST}/skills`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const { skills } = await res.json();
+          if (skills?.length) {
+            registeredSkillNames = skills.map(s =>
+              s.name.toLowerCase().replace(/[^a-z0-9-_]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 32)
+            ).filter(n => n && !CORE_COMMAND_NAMES.has(n));
+            const commands = buildAllCommands(skills);
+            await registerGuildCommands(commands);
+          }
+        }
+      } catch (err) {
+        console.log(`[DISCORD] Skill fetch on startup skipped (VM may be cold): ${err.message}`);
+      }
     });
 
     client.on("messageCreate", async (message) => {
