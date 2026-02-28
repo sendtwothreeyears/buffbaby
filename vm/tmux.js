@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const LOG_DIR = "/tmp";
+const LOG_WARN_BYTES = 10 * 1024 * 1024; // 10MB — warn when log files get large
 
 function logPath(sessionName) {
   return path.join(LOG_DIR, `${sessionName}.log`);
@@ -34,6 +35,9 @@ function readOutput(sessionName, byteOffset = 0) {
     return { output: "", offset: 0 };
   }
   const stat = fs.statSync(filePath);
+  if (stat.size > LOG_WARN_BYTES && byteOffset === 0) {
+    console.warn(`[TMUX] Log file ${filePath} is ${(stat.size / 1024 / 1024).toFixed(1)}MB — consider ending this thread`);
+  }
   if (byteOffset >= stat.size) {
     return { output: "", offset: stat.size };
   }

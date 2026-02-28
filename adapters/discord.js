@@ -214,7 +214,9 @@ function stripAnsi(str) {
 }
 
 function formatAsCodeBlock(text) {
-  const capped = text.slice(0, 1900);
+  // Escape any triple backticks in the content to avoid breaking the code block
+  const safe = text.replace(/```/g, "` ` `");
+  const capped = safe.slice(0, 1900);
   return "```\n" + capped + "\n```";
 }
 
@@ -478,13 +480,23 @@ async function recoverThreads() {
         try { await discordThread.setArchived(false); } catch { /* may lack perms */ }
       }
 
+      // Fetch current log offset so we don't re-send old output
+      let currentOffset = 0;
+      try {
+        const outputRes = await fetch(`${CLAUDE_HOST}/thread/${t.threadId}/output?since=999999999`, { signal: AbortSignal.timeout(3000) });
+        if (outputRes.ok) {
+          const data = await outputRes.json();
+          currentOffset = data.offset || 0;
+        }
+      } catch { /* start from 0 if we can't determine offset */ }
+
       activeThreads.set(t.threadId, {
         type: t.type,
         dir: t.dir,
         command: t.command,
         discordThread,
         pollingInterval: null,
-        lastOffset: 0,
+        lastOffset: currentOffset,
         currentMessageId: null,
         currentMessageLength: 0,
       });
@@ -498,14 +510,6 @@ async function recoverThreads() {
   } catch (err) {
     console.error(`[DISCORD_RECOVERY_ERR] ${err.message}`);
   }
-}
-
-function formatUptime(isoDate) {
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(ms / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  return `${hrs}h ${mins % 60}m`;
 }
 
 module.exports = {

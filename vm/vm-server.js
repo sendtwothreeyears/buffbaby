@@ -828,7 +828,9 @@ app.post("/thread/create", async (req, res) => {
     } else {
       // Agent: start a shell, then send the claude command
       await tmux.createSession(sessionName, resolved, "bash");
-      const claudeCmd = `claude -p --dangerously-skip-permissions "${command.replace(/"/g, '\\"')}"`;
+      // Use single quotes to prevent shell interpretation of $, backticks, etc.
+      const escaped = command.replace(/'/g, "'\\''");
+      const claudeCmd = `claude -p --dangerously-skip-permissions '${escaped}'`;
       await tmux.sendInput(sessionName, claudeCmd);
     }
 
@@ -874,7 +876,8 @@ app.post("/thread/:id/input", async (req, res) => {
       const running = await tmux.getProcessRunning(sessionName);
       if (!running) {
         // Process exited back to shell — spawn a --continue session
-        const claudeCmd = `claude -p --continue --dangerously-skip-permissions "${text.replace(/"/g, '\\"')}"`;
+        const escaped = text.replace(/'/g, "'\\''");
+        const claudeCmd = `claude -p --continue --dangerously-skip-permissions '${escaped}'`;
         await tmux.sendInput(sessionName, claudeCmd);
       } else {
         await tmux.sendInput(sessionName, text);
