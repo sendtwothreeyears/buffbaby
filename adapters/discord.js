@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, ActivityType, Options, REST, Routes, SlashCommandBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, AttachmentBuilder, ActivityType, Options, REST, Routes, SlashCommandBuilder, ChannelType } = require("discord.js");
 const { chunkText, truncateAtFileBoundary, fetchImageBuffer, viewLinkLabel } = require("./utils");
 
 const {
@@ -15,6 +15,9 @@ const progressMessages = new Map(); // userId -> Discord Message object
 
 // Track pending slash command interactions for deferred reply
 const pendingInteractions = new Map(); // userId -> { interaction, finalSent: boolean }
+
+// Track active thread sessions (Discord thread ID -> thread state)
+const activeThreads = new Map(); // threadId -> { type, dir, command, discordThread, pollingInterval, lastOffset, currentMessageId, currentMessageLength }
 
 let client;
 let targetChannel;
@@ -48,6 +51,15 @@ const CORE_COMMANDS = [
   new SlashCommandBuilder().setName("pr-status").setDescription("Show CI status and review state"),
   new SlashCommandBuilder().setName("pr-merge").setDescription("Merge current PR"),
   new SlashCommandBuilder().setName("clear").setDescription("Start fresh conversation (reset context)"),
+  new SlashCommandBuilder().setName("terminal").setDescription("Spawn a persistent terminal in a thread")
+    .addStringOption(opt => opt.setName("dir").setDescription("Directory (repo or subdirectory)").setRequired(true).setAutocomplete(true))
+    .addStringOption(opt => opt.setName("command").setDescription("Command to run (e.g., npm run dev)").setRequired(true)),
+  new SlashCommandBuilder().setName("agent").setDescription("Spawn a Claude Code agent in a thread")
+    .addStringOption(opt => opt.setName("dir").setDescription("Directory (repo or subdirectory)").setRequired(true).setAutocomplete(true))
+    .addStringOption(opt => opt.setName("prompt").setDescription("What should the agent do?").setRequired(true)),
+  new SlashCommandBuilder().setName("done").setDescription("Close the current thread session"),
+  new SlashCommandBuilder().setName("kill").setDescription("Kill a thread session from main channel")
+    .addStringOption(opt => opt.setName("thread").setDescription("Thread name or ID").setRequired(true).setAutocomplete(true)),
 ];
 
 const CORE_COMMAND_NAMES = new Set(CORE_COMMANDS.map(c => c.name));
@@ -133,22 +145,40 @@ async function handleSlashCommand(interaction, onMessage) {
 }
 
 async function handleAutocomplete(interaction) {
-  if (interaction.commandName !== "switch") return;
+  const focused = interaction.options.getFocused(true);
 
-  const focused = interaction.options.getFocused();
-  try {
-    const res = await fetch(`${CLAUDE_HOST}/repos`, { signal: AbortSignal.timeout(5000) });
-    const data = await res.json();
+  // dir autocomplete — used by /switch, /terminal, /agent
+  if (focused.name === "name" || focused.name === "dir") {
+    try {
+      const res = await fetch(`${CLAUDE_HOST}/repos`, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
 
-    const choices = (data.repos || [])
-      .filter(r => r.name.toLowerCase().includes(focused.toLowerCase()))
-      .slice(0, 25) // Discord max 25 autocomplete choices
-      .map(r => ({ name: r.name, value: r.name }));
+      const choices = (data.repos || [])
+        .filter(r => r.name.toLowerCase().includes(focused.value.toLowerCase()))
+        .slice(0, 25)
+        .map(r => ({ name: r.name, value: r.name }));
 
-    await interaction.respond(choices);
-  } catch {
-    await interaction.respond([]);
+      await interaction.respond(choices);
+    } catch {
+      await interaction.respond([]);
+    }
+    return;
   }
+
+  // thread autocomplete — used by /kill
+  if (focused.name === "thread") {
+    const choices = [];
+    for (const [threadId, info] of activeThreads) {
+      const label = `${info.type}: ${info.dir} — ${(info.command || "").slice(0, 40)}`;
+      if (label.toLowerCase().includes(focused.value.toLowerCase()) || threadId.includes(focused.value)) {
+        choices.push({ name: label.slice(0, 100), value: threadId });
+      }
+    }
+    await interaction.respond(choices.slice(0, 25));
+    return;
+  }
+
+  await interaction.respond([]);
 }
 
 // --- Send helper: routes through pending interaction or falls back to channel ---
@@ -175,6 +205,307 @@ async function sendViaInteractionOrChannel(userId, options) {
 
   if (!targetChannel) return;
   await targetChannel.send(options);
+}
+
+// --- Thread management ---
+
+function stripAnsi(str) {
+  return str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+}
+
+function formatAsCodeBlock(text) {
+  const capped = text.slice(0, 1900);
+  return "```\n" + capped + "\n```";
+}
+
+async function handleThreadCreation(interaction, type) {
+  const authorId = interaction.user.id;
+  if (allowlist.size > 0 && !allowlist.has(authorId)) {
+    await interaction.reply({ content: "You don't have access.", ephemeral: true });
+    return;
+  }
+
+  const dir = interaction.options.getString("dir");
+  const command = type === "terminal"
+    ? interaction.options.getString("command")
+    : interaction.options.getString("prompt");
+
+  await interaction.deferReply();
+
+  try {
+    // Create Discord thread from the channel
+    const channel = interaction.channel;
+    const threadName = type === "terminal"
+      ? `terminal: ${dir} — ${command.slice(0, 40)}`
+      : `agent: ${dir} — ${command.slice(0, 50)}`;
+
+    const thread = await channel.threads.create({
+      name: threadName.slice(0, 100),
+      type: ChannelType.PublicThread,
+      autoArchiveDuration: 1440,
+      reason: `${type} session spawned by ${interaction.user.tag}`,
+    });
+
+    // Call VM to create the tmux session
+    const vmRes = await fetch(`${CLAUDE_HOST}/thread/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        threadId: thread.id,
+        type,
+        dir,
+        command,
+        createdBy: authorId,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const vmData = await vmRes.json();
+
+    if (!vmRes.ok) {
+      await thread.delete().catch(() => {});
+      await interaction.editReply({ content: `Failed: ${vmData.error}` });
+      return;
+    }
+
+    // Register thread locally and start polling
+    activeThreads.set(thread.id, {
+      type,
+      dir,
+      command,
+      discordThread: thread,
+      pollingInterval: null,
+      lastOffset: 0,
+      currentMessageId: null,
+      currentMessageLength: 0,
+    });
+
+    startOutputPolling(thread.id);
+
+    const icon = type === "terminal" ? "🖥" : "🤖";
+    await interaction.editReply({ content: `${icon} Session started → ${thread}` });
+    console.log(`[THREAD] Created ${type}: ${thread.id} (${dir})`);
+  } catch (err) {
+    console.error(`[THREAD_ERR] Creation failed: ${err.message}`);
+    try {
+      await interaction.editReply({ content: `Thread creation failed: ${err.message}` });
+    } catch { /* best effort */ }
+  }
+}
+
+async function handleDoneCommand(interaction) {
+  const threadId = interaction.channelId;
+  if (!activeThreads.has(threadId)) {
+    await interaction.reply({ content: "Not in an active thread session.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply();
+
+  try {
+    const res = await fetch(`${CLAUDE_HOST}/thread/${threadId}/kill`, {
+      method: "POST",
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+
+    const threadInfo = activeThreads.get(threadId);
+    if (threadInfo?.pollingInterval) clearInterval(threadInfo.pollingInterval);
+    activeThreads.delete(threadId);
+
+    const summary = data.summary ? `\n\n**Last output:**\n${formatAsCodeBlock(stripAnsi(data.summary))}` : "";
+    await interaction.editReply({ content: `Session ended.${summary}` });
+
+    // Archive the thread
+    try { await interaction.channel.setArchived(true); } catch { /* may lack perms */ }
+    console.log(`[THREAD] Ended: ${threadId}`);
+  } catch (err) {
+    console.error(`[THREAD_ERR] Done failed: ${err.message}`);
+    await interaction.editReply({ content: `Failed to end session: ${err.message}` });
+  }
+}
+
+async function handleKillCommand(interaction) {
+  const authorId = interaction.user.id;
+  if (allowlist.size > 0 && !allowlist.has(authorId)) {
+    await interaction.reply({ content: "You don't have access.", ephemeral: true });
+    return;
+  }
+
+  const threadArg = interaction.options.getString("thread");
+  const threadInfo = activeThreads.get(threadArg);
+
+  if (!threadInfo) {
+    await interaction.reply({ content: "Thread not found.", ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply();
+
+  try {
+    await fetch(`${CLAUDE_HOST}/thread/${threadArg}/kill`, {
+      method: "POST",
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (threadInfo.pollingInterval) clearInterval(threadInfo.pollingInterval);
+    activeThreads.delete(threadArg);
+
+    const threadName = threadInfo.discordThread?.name || threadArg;
+    try { await threadInfo.discordThread?.setArchived(true); } catch { /* may lack perms */ }
+
+    await interaction.editReply({ content: `Killed thread: ${threadName}` });
+    console.log(`[THREAD] Killed from main: ${threadArg}`);
+  } catch (err) {
+    console.error(`[THREAD_ERR] Kill failed: ${err.message}`);
+    await interaction.editReply({ content: `Failed to kill thread: ${err.message}` });
+  }
+}
+
+async function handleThreadMessage(message) {
+  const threadId = message.channel.id;
+  const threadInfo = activeThreads.get(threadId);
+  if (!threadInfo) return;
+
+  const authorId = message.author.id;
+  if (allowlist.size > 0 && !allowlist.has(authorId)) return;
+
+  try {
+    const res = await fetch(`${CLAUDE_HOST}/thread/${threadId}/input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: message.content }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.status === 410) {
+      await message.reply("Process has exited. Use `/done` to close this thread.");
+    }
+  } catch (err) {
+    console.error(`[THREAD_ERR] Input forward failed: ${err.message}`);
+  }
+}
+
+function startOutputPolling(threadId) {
+  const threadInfo = activeThreads.get(threadId);
+  if (!threadInfo) return;
+
+  const interval = setInterval(async () => {
+    const info = activeThreads.get(threadId);
+    if (!info) { clearInterval(interval); return; }
+
+    try {
+      const res = await fetch(
+        `${CLAUDE_HOST}/thread/${threadId}/output?since=${info.lastOffset}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!res.ok) { clearInterval(interval); return; }
+
+      const { output, offset, processRunning, exitCode } = await res.json();
+      info.lastOffset = offset;
+
+      if (output) {
+        const stripped = stripAnsi(output);
+        // Truncate long lines
+        const formatted = stripped.split("\n").map(line => line.slice(0, 100)).join("\n");
+
+        // Edit-in-place or create new message
+        if (info.currentMessageId && info.currentMessageLength + formatted.length < 1900) {
+          try {
+            const existing = await info.discordThread.messages.fetch(info.currentMessageId);
+            // Extract inner content from code block, append, re-wrap
+            const inner = existing.content.replace(/^```\n?/, "").replace(/\n?```$/, "");
+            const newInner = inner + formatted;
+            const newContent = formatAsCodeBlock(newInner);
+            await existing.edit(newContent);
+            info.currentMessageLength = newInner.length;
+          } catch {
+            // Edit failed — send new message
+            const msg = await info.discordThread.send(formatAsCodeBlock(formatted));
+            info.currentMessageId = msg.id;
+            info.currentMessageLength = formatted.length;
+          }
+        } else {
+          const msg = await info.discordThread.send(formatAsCodeBlock(formatted));
+          info.currentMessageId = msg.id;
+          info.currentMessageLength = formatted.length;
+        }
+      }
+
+      // Process exited
+      if (!processRunning) {
+        await info.discordThread.send(
+          `Process exited with code ${exitCode ?? "unknown"}. Thread remains open — use \`/done\` to close.`,
+        );
+        clearInterval(interval);
+      }
+    } catch (err) {
+      console.error(`[THREAD_POLL_ERR] ${threadId}: ${err.message}`);
+    }
+  }, 1000);
+
+  threadInfo.pollingInterval = interval;
+}
+
+async function recoverThreads() {
+  try {
+    const res = await fetch(`${CLAUDE_HOST}/threads`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return;
+    const { threads } = await res.json();
+
+    if (threads.length === 0) return;
+
+    const mainChannel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+    if (!mainChannel) return;
+
+    // Fetch both active and recently archived threads
+    const activeDiscordThreads = await mainChannel.threads.fetchActive();
+    const archivedThreads = await mainChannel.threads.fetchArchived({ fetchAll: true }).catch(() => ({ threads: new Map() }));
+
+    for (const t of threads) {
+      const discordThread =
+        activeDiscordThreads.threads.get(t.threadId) ||
+        archivedThreads.threads?.get(t.threadId);
+
+      if (!discordThread) {
+        // Discord thread gone — kill orphaned tmux session
+        await fetch(`${CLAUDE_HOST}/thread/${t.threadId}/kill`, { method: "POST" }).catch(() => {});
+        continue;
+      }
+
+      // Unarchive if needed
+      if (discordThread.archived) {
+        try { await discordThread.setArchived(false); } catch { /* may lack perms */ }
+      }
+
+      activeThreads.set(t.threadId, {
+        type: t.type,
+        dir: t.dir,
+        command: t.command,
+        discordThread,
+        pollingInterval: null,
+        lastOffset: 0,
+        currentMessageId: null,
+        currentMessageLength: 0,
+      });
+
+      startOutputPolling(t.threadId);
+    }
+
+    if (threads.length > 0) {
+      console.log(`[DISCORD] Recovered ${threads.length} thread session(s)`);
+    }
+  } catch (err) {
+    console.error(`[DISCORD_RECOVERY_ERR] ${err.message}`);
+  }
+}
+
+function formatUptime(isoDate) {
+  const ms = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m`;
 }
 
 module.exports = {
@@ -213,10 +544,19 @@ module.exports = {
 
       client.user.setActivity("for commands", { type: ActivityType.Listening });
       console.log(`[DISCORD] Bot ready: ${client.user.tag}`);
+
+      // Recover any active thread sessions from the VM
+      await recoverThreads();
     });
 
-    client.on("messageCreate", (message) => {
+    client.on("messageCreate", async (message) => {
       if (message.author.bot) return;
+
+      // Route messages in managed threads to the thread handler
+      if (message.channel.isThread() && activeThreads.has(message.channel.id)) {
+        return handleThreadMessage(message);
+      }
+
       if (message.channel.id !== DISCORD_CHANNEL_ID) return;
 
       const authorId = message.author.id;
@@ -243,6 +583,21 @@ module.exports = {
         }
 
         if (interaction.isChatInputCommand()) {
+          // Thread-specific commands — handle directly, don't route through relay-core
+          const cmd = interaction.commandName;
+          if (cmd === "terminal" || cmd === "agent") {
+            await handleThreadCreation(interaction, cmd);
+            return;
+          }
+          if (cmd === "done") {
+            await handleDoneCommand(interaction);
+            return;
+          }
+          if (cmd === "kill") {
+            await handleKillCommand(interaction);
+            return;
+          }
+
           await handleSlashCommand(interaction, onMessage);
           return;
         }

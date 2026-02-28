@@ -593,8 +593,8 @@ app.get("/repos", (_req, res) => {
   }
 });
 
-// GET /status — current repo, branch, changed files
-app.get("/status", (_req, res) => {
+// GET /status — current repo, branch, changed files, active threads
+app.get("/status", async (_req, res) => {
   lastActivity = Date.now();
 
   const cwd = getCurrentCwd();
@@ -615,6 +615,18 @@ app.get("/status", (_req, res) => {
       parts.push(`Changed files: ${changedFiles}`);
     } else {
       parts.push("Working tree clean");
+    }
+
+    // Append active threads
+    if (activeThreads.size > 0) {
+      parts.push("");
+      parts.push(`Active threads: ${activeThreads.size}`);
+      for (const [threadId, meta] of activeThreads) {
+        const running = await tmux.getProcessRunning(tmuxSessionName(threadId));
+        const icon = meta.type === "terminal" ? "🖥" : "🤖";
+        const status = running ? "running" : "exited";
+        parts.push(`  ${icon} ${meta.dir} — ${(meta.command || "").slice(0, 40)} (${status})`);
+      }
     }
 
     res.json({ text: parts.join("\n") });
