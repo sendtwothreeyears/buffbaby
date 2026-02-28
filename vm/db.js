@@ -131,15 +131,9 @@ function getArtifact(id) {
 
 function deleteExpiredArtifacts() {
   const db = getDb();
-  const rows = db.prepare(
-    "SELECT id, file_path FROM artifacts WHERE expires_at < datetime('now')"
+  return db.prepare(
+    "DELETE FROM artifacts WHERE expires_at < datetime('now') RETURNING id, file_path"
   ).all();
-  if (rows.length > 0) {
-    db.prepare(
-      "DELETE FROM artifacts WHERE expires_at < datetime('now')"
-    ).run();
-  }
-  return rows;
 }
 
 module.exports = {

@@ -1,5 +1,5 @@
 const twilio = require("twilio");
-const { chunkText, truncateAtFileBoundary } = require("./utils");
+const { chunkText, truncateAtFileBoundary, viewLinkLabel } = require("./utils");
 
 const {
   TWILIO_ACCOUNT_SID,
@@ -172,10 +172,7 @@ module.exports = {
 
       // Append web view link if present (WhatsApp: raw URL auto-previews)
       if (data.viewUrl) {
-        const linkLabel = data.outputType === "diff" ? "View full diff" :
-          data.outputType === "build" ? "View full log" :
-          data.outputType === "code" ? "View full file" : "View full output";
-        responseText += `\n\n${linkLabel} ↗\n${PUBLIC_URL}${data.viewUrl}`;
+        responseText += `\n\n${viewLinkLabel(data.outputType)} ↗\n${PUBLIC_URL}${data.viewUrl}`;
       }
 
       if (responseText.length <= MAX_MSG && diffs && !data.viewUrl) {

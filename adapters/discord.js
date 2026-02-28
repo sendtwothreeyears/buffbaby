@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, ActivityType, Options } = require("discord.js");
-const { chunkText, truncateAtFileBoundary, fetchImageBuffer } = require("./utils");
+const { chunkText, truncateAtFileBoundary, fetchImageBuffer, viewLinkLabel } = require("./utils");
 
 const {
   DISCORD_BOT_TOKEN,
@@ -128,10 +128,7 @@ module.exports = {
       // Append web view link if present (Discord: markdown link)
       if (data.viewUrl) {
         const publicUrl = process.env.PUBLIC_URL || "";
-        const linkLabel = data.outputType === "diff" ? "View full diff" :
-          data.outputType === "build" ? "View full log" :
-          data.outputType === "code" ? "View full file" : "View full output";
-        responseText += `\n\n[${linkLabel} ↗](${publicUrl}${data.viewUrl})`;
+        responseText += `\n\n[${viewLinkLabel(data.outputType)} ↗](${publicUrl}${data.viewUrl})`;
       }
 
       if (data.diffs && !data.viewUrl) {

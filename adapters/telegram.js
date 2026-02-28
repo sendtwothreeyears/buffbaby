@@ -1,5 +1,5 @@
 const { Bot, InputFile } = require("grammy");
-const { chunkText, truncateAtFileBoundary, fetchImageBuffer } = require("./utils");
+const { chunkText, truncateAtFileBoundary, fetchImageBuffer, viewLinkLabel } = require("./utils");
 
 const {
   TELEGRAM_BOT_TOKEN,
@@ -138,12 +138,9 @@ module.exports = {
       // Append web view link if present (Telegram: HTML <a> tag)
       if (data.viewUrl) {
         const publicUrl = process.env.PUBLIC_URL || "";
-        const linkLabel = data.outputType === "diff" ? "View full diff" :
-          data.outputType === "build" ? "View full log" :
-          data.outputType === "code" ? "View full file" : "View full output";
         // Must escape the text portion since the whole message will use parse_mode: HTML
         responseText = escapeHtml(responseText);
-        responseText += `\n\n<a href="${escapeHtml(publicUrl + data.viewUrl)}">${linkLabel} ↗</a>`;
+        responseText += `\n\n<a href="${escapeHtml(publicUrl + data.viewUrl)}">${viewLinkLabel(data.outputType)} ↗</a>`;
         useHtml = true;
       }
 
