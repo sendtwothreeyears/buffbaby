@@ -57,7 +57,6 @@ Base skills available via slash commands (repos may add their own):
 - `/diff` — Show uncommitted changes or branch diff
 - `/ship` — Commit, push, and create a PR
 - `/deploy` — Deploy to Fly.io, Vercel, Netlify, Railway, Cloudflare
-- `/help` — Show available commands and usage
 - `/keys` — Manage SSH keys and environment secrets
 - `/logs` — Show application or system logs
 - `/install` — Install additional tools or runtimes
