@@ -57,15 +57,20 @@ function createInlineSummary(text, classification, context) {
  */
 function extractBuildSignal(lines) {
   const signalLines = [];
+  const seen = new Set();
 
   for (const line of lines) {
+    const trimmed = line.trim();
+    if (seen.has(trimmed)) continue;
+
     // Match common test/build result patterns
-    if (/(\d+\s+(passed|failed|errors?|warnings?|skipped)|PASS|FAIL|✓|✗|Tests?:|Suites?:|BUILD\s+(SUCCESS|FAIL))/i.test(line)) {
-      signalLines.push(line.trim());
-    }
+    const isResult = /(\d+\s+(passed|failed|errors?|warnings?|skipped)|PASS|FAIL|✓|✗|Tests?:|Suites?:|BUILD\s+(SUCCESS|FAIL))/i.test(line);
     // Also capture failure messages (lines starting with common failure indicators)
-    if (/^\s*(FAIL|ERROR|✗|×|✕)\s/i.test(line)) {
-      signalLines.push(line.trim());
+    const isFailure = /^\s*(FAIL|ERROR|✗|×|✕)\s/i.test(line);
+
+    if (isResult || isFailure) {
+      signalLines.push(trimmed);
+      seen.add(trimmed);
     }
   }
 

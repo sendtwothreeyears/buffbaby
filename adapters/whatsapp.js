@@ -172,7 +172,6 @@ module.exports = {
 
       // Append web view link if present (WhatsApp: raw URL auto-previews)
       if (data.viewUrl) {
-        const viewLink = `\n\n${PUBLIC_URL}${data.viewUrl}`;
         const linkLabel = data.outputType === "diff" ? "View full diff" :
           data.outputType === "build" ? "View full log" :
           data.outputType === "code" ? "View full file" : "View full output";

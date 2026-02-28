@@ -141,6 +141,8 @@ module.exports = {
         const linkLabel = data.outputType === "diff" ? "View full diff" :
           data.outputType === "build" ? "View full log" :
           data.outputType === "code" ? "View full file" : "View full output";
+        // Must escape the text portion since the whole message will use parse_mode: HTML
+        responseText = escapeHtml(responseText);
         responseText += `\n\n<a href="${escapeHtml(publicUrl + data.viewUrl)}">${linkLabel} ↗</a>`;
         useHtml = true;
       }
