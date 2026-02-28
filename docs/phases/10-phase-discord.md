@@ -19,9 +19,9 @@ Deliverables:
 
 ## Tasks
 
-- [ ] Build Discord adapter — bot connects, receives messages, forwards to relay core, sends responses + media
-  - Plan: `/workflow:plan Discord adapter — discord.js bot, message handling, media delivery, progress updates via message edits`
-  - Ship: `/workflow:ship docs/plans/YYYY-MM-DD-feat-discord-adapter-plan.md`
+- [x] Build Discord adapter — bot connects, receives messages, forwards to relay core, sends responses + media
+  - Plan: `docs/plans/2026-02-27-feat-discord-telegram-adapters-plan.md`
+  - Ship: PR pending
 
 ## Notes
 

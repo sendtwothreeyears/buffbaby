@@ -80,8 +80,8 @@ function collectDiffs() {
 // POST progress callbacks to relay during command execution
 const pendingCallbacks = [];
 
-async function postCallback(phone, payload) {
-  const url = `${RELAY_CALLBACK_URL}/callback/${encodeURIComponent(phone)}`;
+async function postCallback(userId, payload) {
+  const url = `${RELAY_CALLBACK_URL}/callback/${encodeURIComponent(userId)}`;
   const promise = fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -92,7 +92,8 @@ async function postCallback(phone, payload) {
 
 // POST /command — run a prompt through Claude Code
 app.post("/command", (req, res) => {
-  const { text, callbackPhone } = req.body || {};
+  const { text, callbackUserId, callbackPhone } = req.body || {};
+  const userId = callbackUserId || callbackPhone; // backward-compat
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({
       error: "bad_request",
@@ -157,8 +158,8 @@ app.post("/command", (req, res) => {
         approvalRequested = true;
       }
       const progressMatch = line.match(/^::progress::\s*(.+)/);
-      if (progressMatch && RELAY_CALLBACK_URL && callbackPhone) {
-        postCallback(callbackPhone, { type: "progress", message: progressMatch[1] });
+      if (progressMatch && RELAY_CALLBACK_URL && userId) {
+        postCallback(userId, { type: "progress", message: progressMatch[1] });
       }
     }
   });
