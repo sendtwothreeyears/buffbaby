@@ -51,7 +51,6 @@ function getCurrentCwd() {
   return REPOS_DIR;
 }
 
-
 const app = express();
 let busy = false;
 let activeChild = null;
@@ -431,8 +430,9 @@ app.post("/clone", async (req, res) => {
       execSync("git pull", { cwd: repoPath, timeout: 60_000, encoding: "utf-8" });
       console.log(`[CLONE] Pulled existing repo: ${repoName}`);
     } else {
-      // Clone new repo
-      execSync(`git clone ${url} ${repoPath}`, { timeout: 120_000, encoding: "utf-8" });
+      // Clone new repo — use execFileSync to avoid shell injection via URL
+      const { execFileSync } = require("child_process");
+      execFileSync("git", ["clone", url, repoPath], { timeout: 120_000, encoding: "utf-8" });
       console.log(`[CLONE] Cloned: ${repoName}`);
     }
 

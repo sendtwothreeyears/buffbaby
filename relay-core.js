@@ -329,11 +329,49 @@ function createRelay(adapters) {
         fetchOpts.body = body;
       }
 
-      const response = await fetch(vmUrl, fetchOpts);
-      const data = await response.json();
+      const doActionFetch = async () => {
+        const r = await fetch(vmUrl, fetchOpts);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.message || d.error || `VM returned ${r.status}`);
+        return d;
+      };
 
-      if (!response.ok) {
-        throw new Error(data.message || data.error || `VM returned ${response.status}`);
+      let data;
+      try {
+        data = await doActionFetch();
+      } catch (fetchErr) {
+        // Cold-start retry — same pattern as forwardToVM
+        if (fetchErr.cause?.code === "ECONNREFUSED" || fetchErr.message?.includes("ECONNREFUSED")) {
+          console.log(`[COLD-START] VM not reachable for action: ${command}`);
+          await adapter.sendText(userId, "\u23f3 Waking up your VM...");
+
+          const MAX_WAIT = 30_000;
+          const POLL_INTERVAL = 3_000;
+          const start = Date.now();
+
+          while (Date.now() - start < MAX_WAIT) {
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+            try {
+              const healthRes = await fetch(`${CLAUDE_HOST}/health`, { signal: AbortSignal.timeout(2_000) });
+              if (healthRes.ok) {
+                console.log("[COLD-START] VM is up, retrying action");
+                data = await doActionFetch();
+                break;
+              }
+            } catch { /* still waking */ }
+          }
+
+          if (!data) {
+            // Final attempt
+            data = await doActionFetch();
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
+
+      if (!data) {
+        throw new Error("VM did not respond");
       }
 
       // Cache skills from clone/switch responses
