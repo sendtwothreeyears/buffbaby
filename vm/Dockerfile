@@ -51,8 +51,8 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install Claude Code CLI and Playwright CLI globally
 RUN npm install -g @anthropic-ai/claude-code playwright
 
-# Package managers + deploy CLIs (yarn ships with Node 22 via corepack)
-RUN corepack enable && npm install -g pnpm bun vercel netlify-cli @railway/cli wrangler
+# Package managers (yarn + pnpm via corepack, bun standalone) + deploy CLIs
+RUN corepack enable && npm install -g bun vercel netlify-cli @railway/cli wrangler
 
 # Fly.io CLI (install to shared path so appuser can access it)
 RUN curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
