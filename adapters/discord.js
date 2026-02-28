@@ -47,6 +47,7 @@ const CORE_COMMANDS = [
   new SlashCommandBuilder().setName("pr-create").setDescription("Create PR from current branch"),
   new SlashCommandBuilder().setName("pr-status").setDescription("Show CI status and review state"),
   new SlashCommandBuilder().setName("pr-merge").setDescription("Merge current PR"),
+  new SlashCommandBuilder().setName("clear").setDescription("Start fresh conversation (reset context)"),
 ];
 
 const CORE_COMMAND_NAMES = new Set(CORE_COMMANDS.map(c => c.name));
