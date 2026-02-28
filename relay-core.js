@@ -61,6 +61,17 @@ function createRelay(adapters) {
   // --- Skill cache (populated from clone/switch VM responses) ---
   let skillCache = [];
 
+  function updateSkillCache(skills) {
+    skillCache = skills;
+    // Notify Discord adapter to update slash commands
+    const discord = adapterMap.get("discord");
+    if (discord?.updateSlashCommands) {
+      discord.updateSlashCommands(skills).catch((err) => {
+        console.error(`[SKILLS] Discord slash command update failed: ${err.message}`);
+      });
+    }
+  }
+
   function getAdapterForUser(userId) {
     const prefix = userId.split(":")[0];
     const adapter = adapterMap.get(prefix);
@@ -322,7 +333,7 @@ function createRelay(adapters) {
         .then((r) => r.json())
         .then((data) => {
           if (data.skills) {
-            skillCache = data.skills;
+            updateSkillCache(data.skills);
           }
           if (skillCache.length === 0) {
             adapter.sendText(userId, "No project skills found in current repo.");
@@ -427,7 +438,7 @@ function createRelay(adapters) {
 
       // Cache skills from clone/switch responses
       if (data.skills) {
-        skillCache = data.skills;
+        updateSkillCache(data.skills);
       }
 
       console.log(`[ACTION_DONE] ${userId}: ${command}`);
