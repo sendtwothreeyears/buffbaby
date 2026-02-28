@@ -7,7 +7,6 @@ const {
 } = process.env;
 
 const MAX_MSG = 4096;
-const MAX_CAPTION = 1024;
 
 const allowlist = new Set(
   (TELEGRAM_ALLOWED_CHAT_IDS || "").split(",").map(s => s.trim()).filter(Boolean)
@@ -130,12 +129,7 @@ module.exports = {
     progressMessages.delete(userId);
 
     try {
-      // Fetch image buffers
-      const imageBuffers = [];
-      for (const img of (data.images || [])) {
-        const buffer = await fetchImageBuffer(img.url);
-        if (buffer) imageBuffers.push(buffer);
-      }
+      const imageBuffers = await fetchImages(data.images);
 
       // Format text + diffs
       let responseText = data.text || "";
@@ -187,12 +181,7 @@ module.exports = {
       const opts = data.diffs ? { parse_mode: "HTML" } : {};
       await bot.api.sendMessage(chatId, msg.slice(0, MAX_MSG), opts);
 
-      // Send images
-      const imageBuffers = [];
-      for (const img of (data.images || [])) {
-        const buffer = await fetchImageBuffer(img.url);
-        if (buffer) imageBuffers.push(buffer);
-      }
+      const imageBuffers = await fetchImages(data.images);
       await sendImages(chatId, imageBuffers);
     } catch (err) {
       console.error(`[TELEGRAM_APPROVAL_ERR] ${err.description || err.message}`);
@@ -211,6 +200,15 @@ module.exports = {
 };
 
 // --- Helpers ---
+
+async function fetchImages(images) {
+  const buffers = [];
+  for (const img of (images || [])) {
+    const buffer = await fetchImageBuffer(img.url);
+    if (buffer) buffers.push(buffer);
+  }
+  return buffers;
+}
 
 async function sendImages(chatId, buffers, caption) {
   if (buffers.length === 0) return;
