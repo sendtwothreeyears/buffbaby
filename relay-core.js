@@ -34,6 +34,7 @@ function classifyCommand(text) {
   if (lower === "repos") return { type: "action", command: "repos" };
   if (lower === "status") return { type: "action", command: "status" };
   if (lower === "branch") return { type: "action", command: "branch" };
+  if (lower === "clear") return { type: "action", command: "clear" };
 
   // Exact-match PR commands (must be exact to avoid collision with freeform, e.g. "pr create a button")
   if (lower === "pr create") return { type: "action", command: "pr-create" };
@@ -363,6 +364,7 @@ function createRelay(adapters) {
   pr merge        — Merge current PR
   help            — Show this help
   cancel          — Cancel running command
+  clear           — Start fresh conversation
   approve/reject  — Control pending changes`;
 
       if (skillCache.length > 0) {
@@ -445,6 +447,10 @@ function createRelay(adapters) {
           break;
         case "pr-merge":
           vmUrl = `${CLAUDE_HOST}/pr/merge`;
+          method = "POST";
+          break;
+        case "clear":
+          vmUrl = `${CLAUDE_HOST}/clear`;
           method = "POST";
           break;
         default:
