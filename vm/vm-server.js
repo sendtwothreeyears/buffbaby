@@ -67,10 +67,29 @@ let pendingImages = [];
 
 app.use(express.json());
 
-// Serve the current working directory (cloned repo) at /site/
-app.use("/site", (req, res, next) => {
+// Dynamic proxy — /app/:port/* forwards to localhost:<port>
+// Run any server on any port, access it at https://textslash-vm.fly.dev/app/<port>/
+app.use("/app/:port", async (req, res) => {
   lastActivity = Date.now();
-  express.static(getCurrentCwd())(req, res, next);
+  const port = parseInt(req.params.port, 10);
+  if (!port || port < 1024 || port > 65535 || port === Number(PORT)) {
+    return res.status(400).send("Invalid port");
+  }
+  try {
+    const target = `http://127.0.0.1:${port}${req.url}`;
+    const proxyRes = await fetch(target, {
+      method: req.method,
+      headers: { host: `localhost:${port}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    const contentType = proxyRes.headers.get("content-type");
+    if (contentType) res.set("Content-Type", contentType);
+    res.status(proxyRes.status);
+    const buffer = Buffer.from(await proxyRes.arrayBuffer());
+    res.send(buffer);
+  } catch {
+    res.status(502).send(`Nothing running on port ${port}`);
+  }
 });
 
 // --- Thread management (tmux-backed sessions) ---
