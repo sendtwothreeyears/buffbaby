@@ -563,6 +563,28 @@ app.post("/switch", (req, res) => {
   res.json({ text, skills });
 });
 
+// GET /repos/github — list user's GitHub repos for autocomplete
+app.get("/repos/github", async (_req, res) => {
+  lastActivity = Date.now();
+  const q = (_req.query.q || "").toLowerCase();
+
+  try {
+    const out = execFileSync("gh", ["repo", "list", "--json", "nameWithOwner,url", "--limit", "50"], {
+      timeout: 5000,
+      encoding: "utf-8",
+    });
+    let repos = JSON.parse(out).map(r => ({ fullName: r.nameWithOwner, url: r.url }));
+
+    if (q) {
+      repos = repos.filter(r => r.fullName.toLowerCase().includes(q));
+    }
+
+    res.json({ repos });
+  } catch (err) {
+    res.json({ repos: [], error: err.message });
+  }
+});
+
 // GET /repos — list all cloned repos
 app.get("/repos", (_req, res) => {
   lastActivity = Date.now();

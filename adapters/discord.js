@@ -39,7 +39,7 @@ const CORE_COMMANDS = [
   new SlashCommandBuilder().setName("help").setDescription("Show available commands and project skills"),
   new SlashCommandBuilder().setName("status").setDescription("Current repo, branch, changed files"),
   new SlashCommandBuilder().setName("clone").setDescription("Clone a repo to the VM")
-    .addStringOption(opt => opt.setName("url").setDescription("Git repository URL").setRequired(true)),
+    .addStringOption(opt => opt.setName("url").setDescription("Git repository URL or name").setRequired(true).setAutocomplete(true)),
   new SlashCommandBuilder().setName("switch").setDescription("Switch to a different repo")
     .addStringOption(opt => opt.setName("name").setDescription("Repository name").setRequired(true).setAutocomplete(true)),
   new SlashCommandBuilder().setName("repos").setDescription("List all cloned repos"),
@@ -149,6 +149,23 @@ async function handleSlashCommand(interaction, onMessage) {
 
 async function handleAutocomplete(interaction) {
   const focused = interaction.options.getFocused(true);
+
+  // url autocomplete — used by /clone (GitHub repos)
+  if (focused.name === "url") {
+    try {
+      const res = await fetch(`${CLAUDE_HOST}/repos/github?q=${encodeURIComponent(focused.value)}`, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+
+      const choices = (data.repos || [])
+        .slice(0, 25)
+        .map(r => ({ name: r.fullName, value: r.url }));
+
+      await interaction.respond(choices);
+    } catch {
+      await interaction.respond([]);
+    }
+    return;
+  }
 
   // dir autocomplete — used by /switch, /terminal, /agent
   if (focused.name === "name" || focused.name === "dir") {
