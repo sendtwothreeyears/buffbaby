@@ -124,7 +124,17 @@ module.exports = {
 
       // Format text + diffs
       let responseText = data.text || "";
-      if (data.diffs) {
+
+      // Append web view link if present (Discord: markdown link)
+      if (data.viewUrl) {
+        const publicUrl = process.env.PUBLIC_URL || "";
+        const linkLabel = data.outputType === "diff" ? "View full diff" :
+          data.outputType === "build" ? "View full log" :
+          data.outputType === "code" ? "View full file" : "View full output";
+        responseText += `\n\n[${linkLabel} ↗](${publicUrl}${data.viewUrl})`;
+      }
+
+      if (data.diffs && !data.viewUrl) {
         const diffBlock = formatDiscordDiff(data.diffs, data.diffSummary, MAX_MSG - responseText.length);
         if (diffBlock && responseText.length + diffBlock.length <= MAX_MSG) {
           responseText += diffBlock;

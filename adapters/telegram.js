@@ -133,14 +133,28 @@ module.exports = {
 
       // Format text + diffs
       let responseText = data.text || "";
-      if (data.diffs) {
+      let useHtml = false;
+
+      // Append web view link if present (Telegram: HTML <a> tag)
+      if (data.viewUrl) {
+        const publicUrl = process.env.PUBLIC_URL || "";
+        const linkLabel = data.outputType === "diff" ? "View full diff" :
+          data.outputType === "build" ? "View full log" :
+          data.outputType === "code" ? "View full file" : "View full output";
+        responseText += `\n\n<a href="${escapeHtml(publicUrl + data.viewUrl)}">${linkLabel} ↗</a>`;
+        useHtml = true;
+      }
+
+      if (data.diffs && !data.viewUrl) {
         const diffBlock = formatTelegramDiff(data.diffs, data.diffSummary, MAX_MSG - responseText.length);
         if (diffBlock && responseText.length + diffBlock.length <= MAX_MSG) {
           responseText += diffBlock;
+          useHtml = true;
         } else {
           // Overflow: send text first, then diffs separately
           if (responseText) {
-            await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG));
+            const opts = useHtml ? { parse_mode: "HTML" } : {};
+            await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG), opts);
           }
           const overflowDiff = formatTelegramDiff(data.diffs, data.diffSummary, MAX_MSG);
           if (overflowDiff) {
@@ -152,8 +166,7 @@ module.exports = {
       }
 
       if (responseText) {
-        // Use HTML parse_mode only when we have diffs (contains <pre> tags)
-        const opts = data.diffs ? { parse_mode: "HTML" } : {};
+        const opts = useHtml ? { parse_mode: "HTML" } : {};
         await bot.api.sendMessage(chatId, responseText.slice(0, MAX_MSG), opts);
         await sendImages(chatId, imageBuffers);
       } else if (imageBuffers.length > 0) {

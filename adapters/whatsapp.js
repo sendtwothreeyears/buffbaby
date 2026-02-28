@@ -170,7 +170,16 @@ module.exports = {
       const diffs = data.diffs;
       const diffSummary = data.diffSummary;
 
-      if (responseText.length <= MAX_MSG && diffs) {
+      // Append web view link if present (WhatsApp: raw URL auto-previews)
+      if (data.viewUrl) {
+        const viewLink = `\n\n${PUBLIC_URL}${data.viewUrl}`;
+        const linkLabel = data.outputType === "diff" ? "View full diff" :
+          data.outputType === "build" ? "View full log" :
+          data.outputType === "code" ? "View full file" : "View full output";
+        responseText += `\n\n${linkLabel} ↗\n${PUBLIC_URL}${data.viewUrl}`;
+      }
+
+      if (responseText.length <= MAX_MSG && diffs && !data.viewUrl) {
         const diffBudget = MAX_MSG - responseText.length;
         const diffFormatted = formatDiffMessage(diffs, diffSummary, diffBudget);
 
@@ -192,7 +201,7 @@ module.exports = {
       if (responseText.length > MAX_MSG) {
         responseText = responseText.substring(0, MAX_MSG - 22) + "\n\n[Response truncated]";
         await sendWhatsAppMessage(userId, responseText, mediaUrls);
-        if (diffs) {
+        if (diffs && !data.viewUrl) {
           const overflowDiff = formatDiffMessage(diffs, diffSummary, MAX_MSG);
           if (overflowDiff) {
             await sendWhatsAppMessage(userId, overflowDiff.substring(0, MAX_MSG));

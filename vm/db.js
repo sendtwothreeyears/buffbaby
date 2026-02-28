@@ -48,6 +48,20 @@ function runMigrations(db) {
     db.pragma("user_version = 1");
     console.log("[DB] Migrated to version 1");
   }
+
+  if (version < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id         TEXT PRIMARY KEY,
+        type       TEXT NOT NULL,
+        file_path  TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    db.pragma("user_version = 2");
+    console.log("[DB] Migrated to version 2 (artifacts table)");
+  }
 }
 
 // --- Config helpers ---
@@ -100,6 +114,34 @@ function clearSkillsCache(repoPath) {
   db.prepare("DELETE FROM skills_cache WHERE repo_path = ?").run(repoPath);
 }
 
+// --- Artifacts ---
+
+function insertArtifact({ id, type, filePath, ttlMs = 30 * 60 * 1000 }) {
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString().replace("T", " ").replace("Z", "");
+  db.prepare(
+    "INSERT INTO artifacts (id, type, file_path, expires_at) VALUES (?, ?, ?, ?)"
+  ).run(id, type, filePath, expiresAt);
+}
+
+function getArtifact(id) {
+  const db = getDb();
+  return db.prepare("SELECT * FROM artifacts WHERE id = ?").get(id) || null;
+}
+
+function deleteExpiredArtifacts() {
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT id, file_path FROM artifacts WHERE expires_at < datetime('now')"
+  ).all();
+  if (rows.length > 0) {
+    db.prepare(
+      "DELETE FROM artifacts WHERE expires_at < datetime('now')"
+    ).run();
+  }
+  return rows;
+}
+
 module.exports = {
   getDb,
   getConfig,
@@ -108,4 +150,7 @@ module.exports = {
   getCachedSkills,
   setCachedSkills,
   clearSkillsCache,
+  insertArtifact,
+  getArtifact,
+  deleteExpiredArtifacts,
 };

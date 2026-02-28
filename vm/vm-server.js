@@ -4,8 +4,10 @@ const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 const { chromium } = require("playwright");
-const { getConfig, setConfig, logCommand } = require("./db");
+const { getConfig, setConfig, logCommand, getArtifact, deleteExpiredArtifacts } = require("./db");
 const { scanSkills } = require("./skills");
+const { generateView, renderExpiredPage, VIEWS_DIR } = require("./web-views");
+const { classifyOutput, createInlineSummary } = require("./output-classifier");
 
 const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP, RELAY_CALLBACK_URL = "" } = process.env;
 const REPOS_DIR = process.env.REPOS_DIR || "/data/repos";
@@ -37,7 +39,7 @@ const JPEG_QUALITY_FALLBACK = 50;
 
 // Ensure directories exist on startup (Fly Volume mounts overlay container filesystem)
 const fsSync = require("fs");
-for (const dir of [IMAGES_DIR, REPOS_DIR]) {
+for (const dir of [IMAGES_DIR, REPOS_DIR, VIEWS_DIR]) {
   if (!fsSync.existsSync(dir)) {
     fsSync.mkdirSync(dir, { recursive: true });
     console.log(`[STARTUP] Created ${dir}`);
@@ -251,12 +253,43 @@ app.post("/command", (req, res) => {
 
       const images = [...pendingImages];
       pendingImages = [];
-      console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)`);
+
+      // Classify output and generate web view for long output
+      const classification = classifyOutput(textOut, diffResult?.diff);
+      let responseText = textOut;
+      let viewUrl;
+
+      if (classification.isLong) {
+        try {
+          const viewContent = classification.type === "diff"
+            ? (diffResult?.diff || textOut)
+            : textOut;
+          const view = generateView(classification.type, viewContent, {
+            title: `Command Output`,
+            diffs: diffResult?.diff,
+            diffSummary: diffResult?.summary,
+          });
+          viewUrl = `/view/${view.id}`;
+
+          // Replace full text with inline summary
+          responseText = createInlineSummary(textOut, classification, {
+            diffs: diffResult?.diff,
+            diffSummary: diffResult?.summary,
+          });
+        } catch (viewErr) {
+          console.error(`[VIEW_ERR] Failed to generate view: ${viewErr.message}`);
+          // Fall through with original text
+        }
+      }
+
+      console.log(`[DONE]    Exit 0, ${durationMs}ms, ${textOut.length} chars output, ${images.length} image(s)${viewUrl ? `, view: ${viewUrl}` : ""}`);
       res.json({
-        text: textOut,
+        text: responseText,
         images,
         diffs: diffResult?.diff || undefined,
         diffSummary: diffResult?.summary || undefined,
+        outputType: classification.type,
+        viewUrl,
         approvalRequired: approvalRequested && code === 0,
         exitCode: 0,
         durationMs,
@@ -280,6 +313,32 @@ app.get("/images/:filename", (req, res) => {
     return res.sendStatus(400);
   }
   res.sendFile(resolved, (err) => {
+    if (err) res.sendStatus(404);
+  });
+});
+
+// GET /view/:id — serve generated HTML views with expiry check
+app.get("/view/:id", (req, res) => {
+  const { id } = req.params;
+
+  // Validate UUID format
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    return res.sendStatus(400);
+  }
+
+  const artifact = getArtifact(id);
+  if (!artifact) {
+    return res.sendStatus(404);
+  }
+
+  // Check expiry
+  const expiresAt = new Date(artifact.expires_at + "Z").getTime();
+  if (Date.now() > expiresAt) {
+    res.status(410).type("html").send(renderExpiredPage());
+    return;
+  }
+
+  res.sendFile(artifact.file_path, (err) => {
     if (err) res.sendStatus(404);
   });
 });
@@ -595,6 +654,23 @@ setInterval(async () => {
     if (err.code !== "ENOENT") {
       console.error(`[CLEANUP_ERR] ${err.message}`);
     }
+  }
+
+  // Artifact cleanup — delete expired web views using the artifacts table
+  try {
+    const expired = deleteExpiredArtifacts();
+    for (const row of expired) {
+      try {
+        await fs.unlink(row.file_path);
+      } catch (e) {
+        if (e.code !== "ENOENT") console.error(`[CLEANUP_ERR] view ${row.id}: ${e.message}`);
+      }
+    }
+    if (expired.length > 0) {
+      console.log(`[CLEANUP] Removed ${expired.length} expired view(s)`);
+    }
+  } catch (err) {
+    console.error(`[CLEANUP_ERR] artifacts: ${err.message}`);
   }
 }, CLEANUP_INTERVAL_MS);
 

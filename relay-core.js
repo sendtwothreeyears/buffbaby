@@ -102,6 +102,35 @@ function createRelay(adapters) {
     }
   });
 
+  // --- View proxy — serve HTML views from VM ---
+  app.get("/view/:id", async (req, res) => {
+    const { id } = req.params;
+
+    // Validate UUID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      return res.sendStatus(400);
+    }
+
+    try {
+      const vmUrl = `${CLAUDE_HOST}/view/${encodeURIComponent(id)}`;
+      const response = await fetch(vmUrl);
+
+      if (!response.ok) {
+        // Forward status (404, 410) and body from VM
+        const body = await response.text();
+        return res.status(response.status).type("html").send(body);
+      }
+
+      res.type("html");
+      res.set("Cache-Control", "private, max-age=60");
+      const body = await response.text();
+      res.send(body);
+    } catch (err) {
+      console.error(`[VIEW_PROXY_ERR] ${id}: ${err.message}`);
+      res.sendStatus(502);
+    }
+  });
+
   // --- VM progress callback endpoint ---
   app.post("/callback/:userId", (req, res) => {
     const userId = decodeURIComponent(req.params.userId);
