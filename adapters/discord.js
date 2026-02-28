@@ -457,17 +457,12 @@ async function recoverThreads() {
 
     if (threads.length === 0) return;
 
-    const mainChannel = client.channels.cache.get(DISCORD_CHANNEL_ID);
-    if (!mainChannel) return;
-
-    // Fetch both active and recently archived threads
-    const activeDiscordThreads = await mainChannel.threads.fetchActive();
-    const archivedThreads = await mainChannel.threads.fetchArchived({ fetchAll: true }).catch(() => ({ threads: new Map() }));
-
     for (const t of threads) {
-      const discordThread =
-        activeDiscordThreads.threads.get(t.threadId) ||
-        archivedThreads.threads?.get(t.threadId);
+      // Fetch individual thread by ID (avoids bulk-loading all archived threads)
+      let discordThread;
+      try {
+        discordThread = await client.channels.fetch(t.threadId);
+      } catch { /* thread gone or inaccessible */ }
 
       if (!discordThread) {
         // Discord thread gone — kill orphaned tmux session

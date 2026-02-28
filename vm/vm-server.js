@@ -871,17 +871,11 @@ app.post("/thread/:id/input", async (req, res) => {
   }
 
   try {
-    if (threadInfo.type === "agent") {
-      // Check if the claude process is still running
-      const running = await tmux.getProcessRunning(sessionName);
-      if (!running) {
-        // Process exited back to shell — spawn a --continue session
-        const escaped = text.replace(/'/g, "'\\''");
-        const claudeCmd = `claude -p --continue --dangerously-skip-permissions '${escaped}'`;
-        await tmux.sendInput(sessionName, claudeCmd);
-      } else {
-        await tmux.sendInput(sessionName, text);
-      }
+    // Agent with exited process — spawn a --continue session
+    const isAgentRestart = threadInfo.type === "agent" && !(await tmux.getProcessRunning(sessionName));
+    if (isAgentRestart) {
+      const escaped = text.replace(/'/g, "'\\''");
+      await tmux.sendInput(sessionName, `claude -p --continue --dangerously-skip-permissions '${escaped}'`);
     } else {
       await tmux.sendInput(sessionName, text);
     }
@@ -930,21 +924,12 @@ app.post("/thread/:id/kill", async (req, res) => {
 
 // GET /threads — list all active thread sessions
 app.get("/threads", async (_req, res) => {
-  const sessions = await tmux.listSessions();
-  const threadSessions = sessions.filter(s => s.startsWith("thread-"));
-
-  const threads = [];
-  for (const session of threadSessions) {
-    const threadId = session.replace("thread-", "");
-    const meta = activeThreads.get(threadId) || { threadId, type: "unknown", dir: "unknown", command: "unknown" };
-    const processRunning = await tmux.getProcessRunning(session);
-    threads.push({
-      ...meta,
-      status: processRunning ? "running" : "exited",
-      processRunning,
-    });
-  }
-
+  const threads = await Promise.all(
+    [...activeThreads.entries()].map(async ([threadId, meta]) => {
+      const processRunning = await tmux.getProcessRunning(tmuxSessionName(threadId));
+      return { ...meta, status: processRunning ? "running" : "exited", processRunning };
+    }),
+  );
   res.json({ threads });
 });
 

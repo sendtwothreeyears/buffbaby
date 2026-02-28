@@ -97,8 +97,14 @@ async function getExitCode(sessionName) {
 function getSummary(sessionName, maxLines = 10) {
   const filePath = logPath(sessionName);
   if (!fs.existsSync(filePath)) return "(no output)";
-  const content = fs.readFileSync(filePath, "utf-8");
-  const lines = content.trim().split("\n");
+  const stat = fs.statSync(filePath);
+  // Read only the last 4KB to avoid loading huge log files
+  const readSize = Math.min(stat.size, 4096);
+  const fd = fs.openSync(filePath, "r");
+  const buf = Buffer.alloc(readSize);
+  fs.readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+  fs.closeSync(fd);
+  const lines = buf.toString("utf-8").trim().split("\n");
   return lines.slice(-maxLines).join("\n") || "(no output)";
 }
 
