@@ -45,7 +45,11 @@ _Goal: Same relay, three channels. Prove the adapter pattern works locally._
 
 _Goal: Channel-native UX, resilience, multi-agent support._
 
-- Phase 12: Channel Polish → `12-phase-channel-polish.md`
+- Phase 12: Mobile Dev Cockpit → `12-phase-channel-polish.md`
+  - 12.1: Command Routing + VM Skills + SQLite
+  - 12.2: Smart Output Rendering + Web Views
+  - 12.3: Skill Discovery + Discord Slash Commands
+  - 12.4: Polish + Additional Capabilities
 - Phase 13: Multi-Agent → `13-phase-multi-agent.md`
 
 ---

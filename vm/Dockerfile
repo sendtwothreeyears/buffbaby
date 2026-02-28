@@ -1,8 +1,11 @@
 FROM node:22
 
-# System dependencies for Chromium/Playwright
+# System dependencies for Chromium/Playwright + better-sqlite3 native build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    python3 \
+    make \
+    g++ \
     chromium \
     fonts-liberation \
     libgbm1 \
@@ -40,11 +43,11 @@ COPY package.json ./
 RUN npm install --production
 
 # Copy application files
-COPY vm-server.js CLAUDE.md ./
+COPY vm-server.js db.js skills.js CLAUDE.md ./
 COPY test-app/ ./test-app/
 
-# Create images directory for Phase 4+ and set ownership
-RUN mkdir -p /tmp/images /data/images && chown appuser:appuser /tmp/images /data/images
+# Create directories and set ownership (Fly Volume mounts overlay these — dirs created at runtime too)
+RUN mkdir -p /tmp/images /data/images /data/repos && chown appuser:appuser /tmp/images /data/images /data/repos /data
 RUN chown -R appuser:appuser /app
 
 USER appuser

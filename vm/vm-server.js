@@ -4,8 +4,11 @@ const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 const { chromium } = require("playwright");
+const { getConfig, setConfig, logCommand } = require("./db");
+const { scanSkills } = require("./skills");
 
 const { ANTHROPIC_API_KEY, PORT = "3001", COMMAND_TIMEOUT_MS = "300000", IDLE_TIMEOUT_MS = "1800000", ENABLE_TEST_APP, RELAY_CALLBACK_URL = "" } = process.env;
+const REPOS_DIR = process.env.REPOS_DIR || "/data/repos";
 
 // Fail-fast env var validation
 if (!ANTHROPIC_API_KEY) {
@@ -32,11 +35,20 @@ const MAX_IMAGE_BYTES = 600_000;
 const JPEG_QUALITY = 75;
 const JPEG_QUALITY_FALLBACK = 50;
 
-// Ensure IMAGES_DIR exists on startup (Fly Volume mounts overlay container filesystem)
+// Ensure directories exist on startup (Fly Volume mounts overlay container filesystem)
 const fsSync = require("fs");
-if (!fsSync.existsSync(IMAGES_DIR)) {
-  fsSync.mkdirSync(IMAGES_DIR, { recursive: true });
-  console.log(`[STARTUP] Created ${IMAGES_DIR}`);
+for (const dir of [IMAGES_DIR, REPOS_DIR]) {
+  if (!fsSync.existsSync(dir)) {
+    fsSync.mkdirSync(dir, { recursive: true });
+    console.log(`[STARTUP] Created ${dir}`);
+  }
+}
+
+// Restore CWD from SQLite — defaults to REPOS_DIR if not set or invalid
+function getCurrentCwd() {
+  const saved = getConfig("cwd");
+  if (saved && fsSync.existsSync(saved)) return saved;
+  return REPOS_DIR;
 }
 
 const app = express();
@@ -51,10 +63,11 @@ let pendingImages = [];
 app.use(express.json());
 
 // Collect uncommitted git diffs after command execution
-function collectDiffs() {
+function collectDiffs(cwd) {
+  const execCwd = cwd || getCurrentCwd();
   try {
     const diff = execSync("git diff HEAD --no-color", {
-      cwd: process.cwd(),
+      cwd: execCwd,
       timeout: 2000,
       maxBuffer: 512 * 1024,
       encoding: "utf-8",
@@ -63,7 +76,7 @@ function collectDiffs() {
     if (!diff.trim()) return null;
 
     const summary = execSync("git diff HEAD --stat --no-color", {
-      cwd: process.cwd(),
+      cwd: execCwd,
       timeout: 2000,
       maxBuffer: 64 * 1024,
       encoding: "utf-8",
@@ -116,7 +129,9 @@ app.post("/command", (req, res) => {
   const stderrChunks = [];
   let approvalRequested = false;
 
+  const cwd = getCurrentCwd();
   const child = spawn("claude", ["-p", "--continue", "--dangerously-skip-permissions", "-"], {
+    cwd,
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -201,7 +216,7 @@ app.post("/command", (req, res) => {
       await Promise.allSettled(pendingCallbacks);
       pendingCallbacks.length = 0;
 
-      const diffResult = collectDiffs();
+      const diffResult = collectDiffs(cwd);
 
       if (timedOut) {
         const images = [...pendingImages];
@@ -329,9 +344,11 @@ app.post("/approve", async (req, res) => {
   busy = true;
   lastActivity = Date.now();
 
+  const approveCwd = getCurrentCwd();
   try {
     if (approved) {
       const child = spawn("claude", ["-p", "--dangerously-skip-permissions", "-"], {
+        cwd: approveCwd,
         detached: true,
         stdio: ["pipe", "pipe", "pipe"],
       });
@@ -370,7 +387,7 @@ app.post("/approve", async (req, res) => {
         prUrl: prUrlMatch ? prUrlMatch[0] : null,
       });
     } else {
-      execSync("git checkout . && git clean -fd", { cwd: process.cwd(), timeout: 5000 });
+      execSync("git checkout . && git clean -fd", { cwd: approveCwd, timeout: 5000 });
       console.log("[REJECT] Changes reverted");
       res.json({ text: "Changes reverted." });
     }
@@ -381,6 +398,155 @@ app.post("/approve", async (req, res) => {
     busy = false;
     activeChild = null;
   }
+});
+
+// POST /clone — clone a git repo to /data/repos/<name>
+app.post("/clone", async (req, res) => {
+  const { url } = req.body || {};
+
+  if (!url || typeof url !== "string" || !url.startsWith("http")) {
+    return res.status(400).json({ error: "bad_request", message: "A valid HTTPS URL is required" });
+  }
+
+  if (busy) {
+    return res.status(409).json({ error: "busy", message: "A command is already in progress" });
+  }
+
+  busy = true;
+  lastActivity = Date.now();
+  const start = Date.now();
+
+  try {
+    // Extract repo name from URL: https://github.com/user/repo.git → repo
+    const repoName = path.basename(url, ".git").replace(/[^a-zA-Z0-9._-]/g, "");
+    if (!repoName) {
+      return res.status(400).json({ error: "bad_request", message: "Could not extract repo name from URL" });
+    }
+
+    const repoPath = path.join(REPOS_DIR, repoName);
+
+    if (fsSync.existsSync(repoPath)) {
+      // Repo already exists — pull latest instead
+      execSync("git pull", { cwd: repoPath, timeout: 60_000, encoding: "utf-8" });
+      console.log(`[CLONE] Pulled existing repo: ${repoName}`);
+    } else {
+      // Clone new repo — use execFileSync to avoid shell injection via URL
+      const { execFileSync } = require("child_process");
+      execFileSync("git", ["clone", url, repoPath], { timeout: 120_000, encoding: "utf-8" });
+      console.log(`[CLONE] Cloned: ${repoName}`);
+    }
+
+    // Update CWD
+    setConfig("cwd", repoPath);
+
+    // Scan skills
+    const skills = scanSkills(repoPath, { useCache: false });
+
+    const durationMs = Date.now() - start;
+    const text = `Cloned ${repoName}. Working directory set to ${repoPath}.${skills.length > 0 ? `\n${skills.length} project skill(s) found.` : ""}`;
+
+    res.json({ text, skills, durationMs });
+  } catch (err) {
+    console.error(`[CLONE_ERR] ${err.message}`);
+    res.status(500).json({ error: "clone_failed", message: err.message });
+  } finally {
+    busy = false;
+  }
+});
+
+// POST /switch — switch to a different cloned repo
+app.post("/switch", (req, res) => {
+  const { name } = req.body || {};
+
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ error: "bad_request", message: "Repo name is required" });
+  }
+
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, "");
+  const repoPath = path.join(REPOS_DIR, sanitized);
+
+  if (!fsSync.existsSync(repoPath)) {
+    return res.status(404).json({ error: "not_found", message: `Repo "${sanitized}" not found. Use 'repos' to see available repos.` });
+  }
+
+  lastActivity = Date.now();
+  setConfig("cwd", repoPath);
+
+  const skills = scanSkills(repoPath, { useCache: false });
+  const text = `Switched to ${sanitized}.${skills.length > 0 ? ` ${skills.length} project skill(s) found.` : ""}`;
+
+  console.log(`[SWITCH] ${sanitized}`);
+  res.json({ text, skills });
+});
+
+// GET /repos — list all cloned repos
+app.get("/repos", (_req, res) => {
+  lastActivity = Date.now();
+
+  try {
+    const currentCwd = getCurrentCwd();
+    const entries = fsSync.existsSync(REPOS_DIR)
+      ? fsSync.readdirSync(REPOS_DIR, { withFileTypes: true }).filter((d) => d.isDirectory())
+      : [];
+
+    const repos = entries.map((d) => {
+      const repoPath = path.join(REPOS_DIR, d.name);
+      const isCurrent = repoPath === currentCwd;
+      return { name: d.name, path: repoPath, current: isCurrent };
+    });
+
+    if (repos.length === 0) {
+      return res.json({ text: "No repos cloned yet. Use 'clone <url>' to get started.", repos });
+    }
+
+    const lines = repos.map((r) => `${r.current ? "→ " : "  "}${r.name}`);
+    const text = `Repos:\n${lines.join("\n")}`;
+
+    res.json({ text, repos });
+  } catch (err) {
+    console.error(`[REPOS_ERR] ${err.message}`);
+    res.status(500).json({ error: "repos_failed", message: err.message });
+  }
+});
+
+// GET /status — current repo, branch, changed files
+app.get("/status", (_req, res) => {
+  lastActivity = Date.now();
+
+  const cwd = getCurrentCwd();
+  const repoName = path.basename(cwd);
+
+  // Check if cwd is a git repo
+  if (!fsSync.existsSync(path.join(cwd, ".git"))) {
+    return res.json({ text: `Working directory: ${cwd}\nNo git repo found. Use 'clone <url>' to get started.` });
+  }
+
+  try {
+    const branch = execSync("git branch --show-current", { cwd, timeout: 5000, encoding: "utf-8" }).trim();
+    const statusOutput = execSync("git status --porcelain", { cwd, timeout: 5000, encoding: "utf-8" }).trim();
+    const changedFiles = statusOutput ? statusOutput.split("\n").length : 0;
+
+    const parts = [`Repo: ${repoName}`, `Branch: ${branch}`];
+    if (changedFiles > 0) {
+      parts.push(`Changed files: ${changedFiles}`);
+    } else {
+      parts.push("Working tree clean");
+    }
+
+    res.json({ text: parts.join("\n") });
+  } catch (err) {
+    console.error(`[STATUS_ERR] ${err.message}`);
+    res.json({ text: `Working directory: ${cwd}\nGit status unavailable: ${err.message}` });
+  }
+});
+
+// GET /skills — return cached skills for current repo
+app.get("/skills", (req, res) => {
+  lastActivity = Date.now();
+  const cwd = getCurrentCwd();
+  const refresh = req.query.refresh === "true";
+  const skills = scanSkills(cwd, { useCache: !refresh });
+  res.json({ skills, repoPath: cwd });
 });
 
 // POST /cancel — kill the active Claude Code process

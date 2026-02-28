@@ -7,6 +7,7 @@ const MAX_QUEUE_DEPTH = 5;
 const RELAY_TIMEOUT_MS = 330_000; // VM's COMMAND_TIMEOUT_MS (300s) + 30s buffer
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_PROGRESS_LENGTH = 4096; // truncation limit for VM progress callbacks
+const ACTION_TIMEOUT_MS = 120_000; // 2 minutes for clone/switch/repos/status
 
 // --- Per-user state ---
 // States: "idle" | "working" | "awaiting_approval"
@@ -17,6 +18,32 @@ function getState(userId) {
     userState.set(userId, { state: "idle", queue: [], approvalTimer: null, abortController: null });
   }
   return userState.get(userId);
+}
+
+// --- Command classifier ---
+function classifyCommand(text) {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Exact-match relay meta-commands
+  if (lower === "help") return { type: "meta", command: "help" };
+  if (lower === "skills") return { type: "meta", command: "skills" };
+  if (lower === "skills --refresh") return { type: "meta", command: "skills-refresh" };
+
+  // Exact-match VM action-commands
+  if (lower === "repos") return { type: "action", command: "repos" };
+  if (lower === "status") return { type: "action", command: "status" };
+
+  // Pattern-match VM action-commands (require arguments)
+  // Match against original text to preserve URL/name casing
+  const cloneMatch = trimmed.match(/^clone\s+(https?:\/\/\S+)/i);
+  if (cloneMatch) return { type: "action", command: "clone", args: { url: cloneMatch[1] } };
+
+  const switchMatch = trimmed.match(/^switch\s+(\S+)/i);
+  if (switchMatch) return { type: "action", command: "switch", args: { name: switchMatch[1] } };
+
+  // Everything else → Claude Code
+  return { type: "freeform" };
 }
 
 function createRelay(adapters) {
@@ -30,6 +57,9 @@ function createRelay(adapters) {
   for (const adapter of adapters) {
     adapterMap.set(adapter.name, adapter);
   }
+
+  // --- Skill cache (populated from clone/switch VM responses) ---
+  let skillCache = [];
 
   function getAdapterForUser(userId) {
     const prefix = userId.split(":")[0];
@@ -123,10 +153,27 @@ function createRelay(adapters) {
       return;
     }
 
-    // --- State: idle — process the command ---
+    // --- State: idle — classify and route ---
+    const classified = classifyCommand(text);
+
+    if (classified.type === "meta") {
+      handleMetaCommand(userId, classified);
+      return;
+    }
+
     state.state = "working";
+
+    if (classified.type === "action") {
+      handleActionCommand(userId, classified, state).catch((err) => {
+        state.state = "idle";
+        state.queue.length = 0;
+        console.error(`[FATAL] ${userId}: unhandled error in handleActionCommand: ${err.message}`);
+      });
+      return;
+    }
+
+    // Freeform → Claude Code (existing path)
     processCommand(userId, text, state).catch((err) => {
-      // Safety net — ensure state is always reset
       state.state = "idle";
       state.queue.length = 0;
       console.error(`[FATAL] ${userId}: unhandled error in processCommand: ${err.message}`);
@@ -177,17 +224,191 @@ function createRelay(adapters) {
 
   // --- Process queued messages ---
   function processQueue(userId, state) {
-    if (state.queue.length > 0) {
-      const next = state.queue.shift();
-      console.log(`[DEQUEUED] ${userId} (remaining: ${state.queue.length})`);
-      processCommand(userId, next, state).catch((err) => {
+    if (state.queue.length === 0) {
+      state.state = "idle";
+      return;
+    }
+
+    const next = state.queue.shift();
+    console.log(`[DEQUEUED] ${userId} (remaining: ${state.queue.length})`);
+
+    // Classify dequeued message through the same router as fresh messages
+    const classified = classifyCommand(next);
+
+    if (classified.type === "meta") {
+      handleMetaCommand(userId, classified);
+      // Meta-commands are synchronous — continue draining
+      processQueue(userId, state);
+      return;
+    }
+
+    if (classified.type === "action") {
+      handleActionCommand(userId, classified, state).catch((err) => {
         state.state = "idle";
         state.queue.length = 0;
-        console.error(`[FATAL] ${userId}: unhandled error in queued processCommand: ${err.message}`);
+        console.error(`[FATAL] ${userId}: unhandled error in queued handleActionCommand: ${err.message}`);
       });
-    } else {
-      state.state = "idle";
+      return;
     }
+
+    // Freeform → Claude Code
+    processCommand(userId, next, state).catch((err) => {
+      state.state = "idle";
+      state.queue.length = 0;
+      console.error(`[FATAL] ${userId}: unhandled error in queued processCommand: ${err.message}`);
+    });
+  }
+
+  // --- Meta-command handlers (respond locally, no VM call) ---
+  function handleMetaCommand(userId, classified) {
+    const adapter = getAdapterForUser(userId);
+
+    if (classified.command === "help") {
+      let helpText = `Core Commands
+  clone <url>  — Clone a repo to the VM
+  switch <name> — Switch to a different repo
+  repos        — List all cloned repos
+  status       — Current repo, branch, changed files
+  help         — Show this help
+  cancel       — Cancel running command
+  approve      — Approve pending changes
+  reject       — Reject pending changes`;
+
+      if (skillCache.length > 0) {
+        const skillLines = skillCache.map((s) => `  ${s.name} — ${s.description}`).join("\n");
+        helpText += `\n\nProject Skills (from current repo)\n${skillLines}`;
+      }
+
+      helpText += "\n\nEverything else is sent directly to Claude Code.";
+      adapter.sendText(userId, helpText);
+      return;
+    }
+
+    if (classified.command === "skills" || classified.command === "skills-refresh") {
+      const refresh = classified.command === "skills-refresh";
+      // Fetch from VM
+      fetch(`${CLAUDE_HOST}/skills${refresh ? "?refresh=true" : ""}`, {
+        signal: AbortSignal.timeout(10_000),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.skills) {
+            skillCache = data.skills;
+          }
+          if (skillCache.length === 0) {
+            adapter.sendText(userId, "No project skills found in current repo.");
+          } else {
+            const lines = skillCache.map((s) => `  ${s.name} — ${s.description}`).join("\n");
+            adapter.sendText(userId, `Project Skills\n${lines}`);
+          }
+        })
+        .catch((err) => {
+          console.error(`[SKILLS_ERR] ${err.message}`);
+          adapter.sendText(userId, "Failed to fetch skills from VM.");
+        });
+      return;
+    }
+  }
+
+  // --- Action-command handlers (route to specific VM endpoints) ---
+  async function handleActionCommand(userId, classified, state) {
+    const adapter = getAdapterForUser(userId);
+    const { command, args } = classified;
+
+    try {
+      let vmUrl;
+      let method = "GET";
+      let body;
+
+      switch (command) {
+        case "clone":
+          vmUrl = `${CLAUDE_HOST}/clone`;
+          method = "POST";
+          body = JSON.stringify({ url: args.url });
+          break;
+        case "switch":
+          vmUrl = `${CLAUDE_HOST}/switch`;
+          method = "POST";
+          body = JSON.stringify({ name: args.name });
+          break;
+        case "repos":
+          vmUrl = `${CLAUDE_HOST}/repos`;
+          break;
+        case "status":
+          vmUrl = `${CLAUDE_HOST}/status`;
+          break;
+        default:
+          adapter.sendText(userId, `Unknown action command: ${command}`);
+          state.state = "idle";
+          return;
+      }
+
+      console.log(`[ACTION] ${userId}: ${command}${args ? " " + JSON.stringify(args) : ""}`);
+
+      const fetchOpts = { method, signal: AbortSignal.timeout(ACTION_TIMEOUT_MS) };
+      if (body) {
+        fetchOpts.headers = { "Content-Type": "application/json" };
+        fetchOpts.body = body;
+      }
+
+      const doActionFetch = async () => {
+        const r = await fetch(vmUrl, fetchOpts);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.message || d.error || `VM returned ${r.status}`);
+        return d;
+      };
+
+      let data;
+      try {
+        data = await doActionFetch();
+      } catch (fetchErr) {
+        // Cold-start retry — same pattern as forwardToVM
+        if (fetchErr.cause?.code === "ECONNREFUSED" || fetchErr.message?.includes("ECONNREFUSED")) {
+          console.log(`[COLD-START] VM not reachable for action: ${command}`);
+          await adapter.sendText(userId, "\u23f3 Waking up your VM...");
+
+          const MAX_WAIT = 30_000;
+          const POLL_INTERVAL = 3_000;
+          const start = Date.now();
+
+          while (Date.now() - start < MAX_WAIT) {
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+            try {
+              const healthRes = await fetch(`${CLAUDE_HOST}/health`, { signal: AbortSignal.timeout(2_000) });
+              if (healthRes.ok) {
+                console.log("[COLD-START] VM is up, retrying action");
+                data = await doActionFetch();
+                break;
+              }
+            } catch { /* still waking */ }
+          }
+
+          if (!data) {
+            // Final attempt
+            data = await doActionFetch();
+          }
+        } else {
+          throw fetchErr;
+        }
+      }
+
+      if (!data) {
+        throw new Error("VM did not respond");
+      }
+
+      // Cache skills from clone/switch responses
+      if (data.skills) {
+        skillCache = data.skills;
+      }
+
+      console.log(`[ACTION_DONE] ${userId}: ${command}`);
+      await adapter.sendText(userId, data.text || "Done.");
+    } catch (err) {
+      console.error(`[ACTION_ERR] ${userId}: ${command}: ${err.message}`);
+      await adapter.sendText(userId, `Failed: ${err.message}`);
+    }
+
+    processQueue(userId, state);
   }
 
   // --- Approval handlers ---
